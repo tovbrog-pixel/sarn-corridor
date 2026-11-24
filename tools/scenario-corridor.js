@@ -107,6 +107,7 @@ function makeCorridor() {
     .map(([n, pts, own]) => { const p = C(n); return [n, p[0], p[1], pts, own]; });
   for (const [n, x, y, pts] of [['Vesna crossing', 515, 95, 10], ['Corridor south', 520, 205, 10]]) { const p = W(x, y); vp.push([n, p[0], p[1], pts, 1]); }
   for (const [n, x, y] of [['Lisno', 515, 175], ['Korvik', 600, 128], ['Dolna', 625, 330], ['Hradek', 590, 245], ['Velka', 760, 270], ['Brodek', 528, 280], ['Mostin', 490, 120]]) { const p = W(x, y); vp.push([n, p[0], p[1], 5, 1]); m.towns.push([n, p[0], p[1], 1, 1.0]); }   // villages drawn like other size-1 towns, about 2 km across
+  if (process.env.SC_SMALLTOWNS) for (const t of m.towns) t.length = 4;   // test switch: the engine's original town sizes
   // ---- supply, ports, air (game settings; aircraft types are stand-ins)
   const src = (n, at, stock, rate, t) => { const p = typeof at === 'string' ? C(at) : W(at[0], at[1]); return Object.assign({ n, x: p[0], y: p[1], stock, rate }, t ? { t } : {}); };
   const vSrc = [src('Halden depots', 'Halden', 120, 4), src('Freyburg railhead', 'Freyburg', 90, 4), src('Saarholt railhead', 'Saarholt', 60, 3), src('Brennhaven port', 'Brennhaven', 40, 2), src('Ostrand port (Ostval)', 'Ostrand', 40, 2), src('Varnholm depot', 'Varnholm', 20, 1)];
@@ -153,5 +154,5 @@ if (require.main === module) {
     if (g % (24 * 60) === 0) { const act = S.forms.filter(F => F.active && !F.dead); console.log('  ' + S.clock(S.t).slice(0, 16) + ' | ' + ((Date.now() - t1) / 1000).toFixed(0) + ' s | on map V ' + act.filter(F => F.s === 0).length + ' S/K ' + act.filter(F => F.s === 1).length + ' | losses ' + S.losses.map(v => v.toFixed(0)).join(' / ') + ' | Valdenmark holds ' + held().join(', ')); } }
   const win = CORR.every(n => held().includes(n));
   console.log('Result: ' + (g / 60) + ' game h in ' + ((Date.now() - t1) / 1000).toFixed(1) + ' s; corridor ' + (win ? 'TAKEN' : 'not taken') + '; Valdenmark holds ' + held().join(', '));
-  if (process.argv[4]) fs.writeFileSync(process.argv[4], JSON.stringify({ seed, variant: S.sc.variantIndex, variantName: V.variantName, hours: g / 60, held: held(), corridor: win, losses: S.losses }));
+  if (process.argv[4]) fs.writeFileSync(process.argv[4], JSON.stringify({ seed, variant: S.sc.variantIndex, variantName: V.variantName, hours: g / 60, held: held(), corridor: win, losses: S.losses, config: (process.env.SC_SMALLTOWNS ? 'small' : 'big') + (process.env.SC_NOURBAN ? '' : '+rules'), first: Object.fromEntries(S.vp.filter(v => v.first && v.first[0] != null).map(v => [v.n, Math.round(v.first[0])])) }));   // first: game hour Valdenmark first took each objective
 }
