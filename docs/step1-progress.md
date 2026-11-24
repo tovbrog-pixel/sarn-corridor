@@ -66,3 +66,11 @@ Tov asked for divisions and corps to advance as a line, over open ground near th
 - **France 1944:** the fix document carries fixes 1 to 6 only; these features stay in this game, since the France campaign uses historical deployments.
 
 **Early results (full runs in progress):** variant 0 (Sarn expects the corridor; Valdenmark's main effort south) had Valdenmark holding Tarnek, Sarnow and both corridor objectives by day 9 of the war; variant 5 (Sarn expects the south; main effort north) had Port Vesna and both corridor objectives by day 7.
+
+## Deployment display fixes (24 Nov 2026)
+
+- Valdenmark's 16 first-echelon infantry divisions now start on one line of departure. The line runs 6 km inside the frontier from y 32 to y 372, smoothed over 30 km. Each division holds a sector of it and stretches across the whole sector (`stretch: 1` on the formation; engine/src/sim.js now reads `fs.stretch`). Motorized and panzer divisions form the second echelon behind it.
+- Division and regiment labels skip any label that would overlap one already drawn (engine/src/render3.js).
+- The camera has no zoom-out limit (R.maxDist about 1,300 km). R.jump only zooms in; use R.glideTo or R.fitAll for the theatre view.
+- Sarn's thin-sector regex now reaches the browser build as source strings.
+- Check run, variant 0, seed 101, 168 h: Valdenmark took Tarnek on 5 Jun (day 4 of the war) and the Vesna crossing on 6 Jun. Losses V 26, S 29.

@@ -81,7 +81,7 @@ function createSim(sc, player, seed, opt) {
     F.abn = !!abn; F.hq = mkSub(F, 'hq_' + fs.nat.toLowerCase() + (abn ? '_abn' : ''), 'HQ, ' + fs.n, 1, fs.x, fs.y); F.subs.push(F.hq);
     F.cap = 1.5 + F.subs.reduce((a, u) => a + u.size, 0) * 1.5; F.stock = F.cap * .7;
     S.forms.push(F);
-    if (!F.arr) { activate(F, true); if (fs.line) { F.order = mkOrder(F, [], fs.line); F.order.st = 'done'; F.order.stretch = !!(sc.thin && sc.thin.some(r => r.test(F.n))); F.order.prog = F.order.L; const sl = lineSlots(F, F.order); for (const u of F.subs) { const p = sl.get(u); if (p) { u.x = p[0]; u.y = p[1]; u.slot = p; u.ent = fs.dug ? 1 : .4; } } F.status = 'Holding position'; } }
+    if (!F.arr) { activate(F, true); if (fs.line) { F.order = mkOrder(F, [], fs.line); F.order.st = 'done'; F.order.stretch = !!(fs.stretch || (sc.thin && sc.thin.some(r => r.test(F.n)))); F.order.prog = F.order.L; const sl = lineSlots(F, F.order); for (const u of F.subs) { const p = sl.get(u); if (p) { u.x = p[0]; u.y = p[1]; u.slot = p; u.ent = fs.dug ? 1 : .4; } } F.status = 'Holding position'; } }
     else { { const vf = [.25, 1, 1.8][VR], rd = F.arr.mode === 'road'; F.arrT = F.arr.t * 60 * (F.arr.t > 2 ? dfS(F.s).arr : 1) + (rd ? 0 : 20) + (F.arr.t > 2 ? (rd && F.arr.t > 8 ? rnd() * 1.25 - .25 : rnd()) * (rd ? 240 : 120) * vf : 0); } F.stock = F.cap * (F.arr.mode === 'road' ? .7 : .6); F.status = 'Arrives ' + S.clock(F.arrT); }
   });
   if (VR) {

@@ -6,8 +6,9 @@ const out = process.argv[2] || '/tmp/preview'; fs.mkdirSync(out, { recursive: tr
 const which = process.argv[3] || 'corridor', menu = process.argv[4] === 'menu', side = menu ? -1 : +(process.argv[4] == null ? -1 : process.argv[4]);   // 'menu': open on the scenario menu (the desktop app)
 const sc = require('./scenario-corridor')();
 const b64 = a => Buffer.from(a.buffer, a.byteOffset, a.byteLength).toString('base64');
-const keep = ['id', 'title', 'sub', 'modules', 'front', 'detourKm', 'aiExact', 'divScale', 'view', 'phaseLines', 'fieldPlan', 'commands', 'cmdPlan', 'politics', 'brief', 'hist', 'ports', 'beach', 'w', 'h', 'cs', 'realLines', 'rivers', 'roads', 'rails', 'towns', 'ownCell', 'ownR', 'ownMax', 'isoShrinkKm', 'variants', 'hHour', 'intel', 'corpsPlan', 'armyAI', 'repl', 'playerSides', 'labels', 'hours', 'start', 'forest', 'rough', 'marsh', 'bridges', 'vp', 'weather', 'forms'];
+const keep = ['id', 'title', 'sub', 'modules', 'front', 'detourKm', 'aiExact', 'divScale', 'view', 'phaseLines', 'fieldPlan', 'commands', 'cmdPlan', 'politics', 'brief', 'hist', 'ports', 'beach', 'w', 'h', 'cs', 'realLines', 'rivers', 'roads', 'rails', 'towns', 'ownCell', 'thin', 'ownR', 'ownMax', 'isoShrinkKm', 'variants', 'hHour', 'intel', 'corpsPlan', 'armyAI', 'repl', 'playerSides', 'labels', 'hours', 'start', 'forest', 'rough', 'marsh', 'bridges', 'vp', 'weather', 'forms'];
 const D = {}; for (const k of keep) D[k] = sc[k];
+if (sc.thin) D.thin = sc.thin.map(r => r.source);   // regular expressions travel as their source text
 D.raster = { w: sc.raster.w, h: sc.raster.h, t: b64(sc.raster.t), el: b64(sc.raster.el) };
 D.sideOv = sc.sides.map(s => true ? { name: s.name, rear: s.rear, posture: s.posture, pocket: s.pocket, restH: s.restH, aiPerVP: s.aiPerVP, aiRng: s.aiRng, sources: s.sources, pool: s.pool, bases: s.bases, transport: s.transport, groups: s.groups, assets: s.assets } : { rear: s.rear, pocket: undefined, sources: s.sources, bases: s.bases, transport: s.transport });
 const inject = `
@@ -16,7 +17,7 @@ const inject = `
   const base = SCENARIOS.find(s => s.id === 'falaise');
   const sc = Object.assign({}, base, D, { raster: { w: D.raster.w, h: D.raster.h, t: dec(D.raster.t, Uint8Array), el: dec(D.raster.el, Float32Array) },
     sides: base.sides.map((sd, s) => Object.assign({ pocket: undefined }, sd, D.sideOv[s], { assets: D.sideOv[s].assets || sd.assets || [] })),
-    front: D.front, thin: undefined, halt: undefined, mines: undefined, sea: undefined, elev: undefined, beach: D.beach });
+    front: D.front, thin: D.thin ? D.thin.map(r => new RegExp(r)) : undefined, halt: undefined, mines: undefined, sea: undefined, elev: undefined, beach: D.beach });
   delete sc.sideOv; SCENARIOS.unshift(sc); ${menu ? "for (let i = SCENARIOS.length - 1; i >= 0; i--) if (!['corridor'].includes(SCENARIOS[i].id)) SCENARIOS.splice(i, 1);" : ''} ${menu ? '' : 'window.AUTOSTART = '}${menu ? '' : '[0, ' + side + ', 1, 1]'}${menu ? '' : ';'}
 })();
 `;

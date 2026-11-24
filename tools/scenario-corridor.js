@@ -58,11 +58,16 @@ function buildVariant(sarnPlan, vAxis) {
   mk('sa_inf', 1, 'sa', '19th (Reserve) Division', ['37th', '38th', '19th'], 680, 295, 'sa-res'); mk('sa_inf', 1, 'sa', '20th (Reserve) Division', ['39th', '40th', '20th'], 600, 330, 'sa-res');
 
   // ---- Valdenmark: 16 infantry divisions along its frontier, thick opposite the main axis; two panzer corps massed behind it
-  const MAIN = AXES[vAxis], vLine = []; for (let y = 25; y <= 370; y += 5) vLine.push([vEdge(y) - 10, y]);
+  // line of departure: 6 km inside the frontier, smoothed over 30 km so it runs as one line; first-echelon divisions take sectors of it,
+  // narrow opposite the main axis and wide elsewhere, and deploy along their sectors at the start (doctrine: assembly before H-hour)
+  const MAIN = AXES[vAxis], raw = []; for (let y = 32; y <= 372; y += 5) raw.push([vEdge(y) - 6, y]);
+  const vLine = raw.map((p, i) => { const w = raw.slice(Math.max(0, i - 3), i + 4); let x = Math.min(p[0], w.reduce((a, q) => a + q[0], 0) / w.length); for (let k = 0; k < 20 && !inPoly(x, p[1], NAT('V')); k++) x -= 2; return [x, p[1]]; });
   const vl = spread(vLine, 16, (x, y) => bandW(y, MAIN.y, 2.5)), vIds = ['vd-i', 'vd-i', 'vd-i', 'vd-i', 'vd-ii', 'vd-ii', 'vd-ii', 'vd-ii', 'vd-iii', 'vd-iii', 'vd-iii', 'vd-iii', 'vd-iv', 'vd-iv', 'vd-iv', 'vd-iv'];
   ['vd-i', 'vd-ii', 'vd-iii', 'vd-iv'].forEach((id, i) => corps(id, 0, 'Valdenmark ' + ['I', 'II', 'III', 'IV'][i] + ' Corps', 'Gen. ' + ['Henrik Morr', 'Ulrich Stade', 'Bernd Kolbe', 'Anton Reiss'][i], .55, 'vd-army'));
   const infNo = [3, 5, 6, 7, 8, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29];
-  vl.pts.forEach((q, i) => mk('vd_inf', 0, 'vd', ord(infNo[i]) + ' Infantry Division', [ord(3 * infNo[i] - 2), ord(3 * infNo[i] - 1), ord(3 * infNo[i])], q.x, q.y, vIds[i]));
+  vl.pts.forEach((q, i) => { const a = i ? (vl.pts[i - 1].d + q.d) / 2 : Math.max(0, q.d - 10), b = i < vl.pts.length - 1 ? (q.d + vl.pts[i + 1].d) / 2 : Math.min(vl.L, q.d + 10), seg = [];
+    for (let d = a; d <= b + 1e-6; d += Math.max(1, (b - a) / 8)) { const r = polyAt(vLine, Math.min(d, vl.L)); seg.push(W(r.x, r.y)); }
+    mk('vd_inf', 0, 'vd', ord(infNo[i]) + ' Infantry Division', [ord(3 * infNo[i] - 2), ord(3 * infNo[i] - 1), ord(3 * infNo[i])], q.x, q.y, vIds[i], { line: seg, stretch: 1 }); });
   corps('vd-pza', 0, 'Valdenmark I Panzer Corps', 'Gen. Arno Velten', .75, 'vd-army'); corps('vd-pzb', 0, 'Valdenmark II Panzer Corps', 'Gen. Kurt Hallwig', .7, 'vd-army');
   const mx = vEdge(MAIN.c) - 28;
   mk('vd_pz', 0, 'vd', '1st Panzer Division', ['1st', '2nd', '1st'], mx, MAIN.c - 18, 'vd-pza'); mk('vd_pz', 0, 'vd', '2nd Panzer Division', ['3rd', '4th', '2nd'], mx, MAIN.c, 'vd-pza'); mk('vd_mot', 0, 'vd', '13th Motorized Division', ['66th', '93rd'], mx - 12, MAIN.c + 14, 'vd-pza');
@@ -117,7 +122,7 @@ function makeCorridor() {
     assets: [], sources: s ? sSrc : vSrc, pool: [], bases: s ? sBases : vBases, transport: { aircraft: 0 }, groups: s ? sGroups : vGroups }));
   const v0 = variants[0];
   return Object.assign({}, base, m, { id: 'corridor', title: 'Corridor Crisis', sub: 'Valdenmark against Sarn: two days of tension, then three weeks of war', start: START, hours: HHOUR + DAYS * 24, hHour: HHOUR,
-    ownCell: 1, ownR: 5, ownMax: 25, isoShrinkKm: 20, aiExact: 1, labels: ['Valdenmark', 'Sarn'], divScale: [22, 70],
+    ownCell: 1, ownR: 5, ownMax: 25, isoShrinkKm: 20, thin: [/^\d+(st|nd|rd|th) (\(\w+\) )?Division$/],   // Sarn's divisions stretch over long sectors (thin defence) aiExact: 1, labels: ['Valdenmark', 'Sarn'], divScale: [22, 70],
     forms: v0.forms, commands: v0.commands, cmdPlan: v0.cmdPlan, corpsPlan: v0.corpsPlan, variants,
     armyAI: { only: ['vd-army', 'ko-army'], from: HHOUR + 30, frontKm: 5, reachKm: 70, cadenceH: 18, waitH: 30, supply: .3, pocketBonus: 2.5 },
     detourKm: 30, view: { x: 330, y: 190, dist: 230, pitch: 1.3 }, playerSides: [0, 1, -1],
@@ -126,7 +131,7 @@ function makeCorridor() {
     repl: { pools: [{ k: 'vd', n: 'Valdenmark depots', s: 0, nat: ['GE'], perDay: [{ from: HHOUR, n: 2.5 }], xp: .85 },
       { k: 'sa', n: 'Sarn reserves', s: 1, nat: ['IT'], perDay: [{ from: HHOUR, n: 1 }], xp: .75 },
       { k: 'ko', n: 'Korovian drafts', s: 1, nat: ['UK'], perDay: [{ from: HHOUR + 72, n: 1.2 }], xp: .8 }] },
-    forest: [], rough: [], marsh: [], bridges: [], vp, ports, weather, sides, front, thin: undefined, halt: undefined, mines: undefined, beach: [], phaseLines: [], fieldPlan: [],
+    forest: [], rough: [], marsh: [], bridges: [], vp, ports, weather, sides, front, halt: undefined, mines: undefined, beach: [], phaseLines: [], fieldPlan: [],
     brief: ['Sarn has refused passage across the corridor that cuts Valdenmark off from Ostval. You have two days before H-hour to study the intelligence picture and set your main effort; faded symbols mark Sarn divisions known only from pre-war reports. Then take Port Vesna and the corridor within three weeks, before Korovia brings its weight against Ostval.',
       'Valdenmark is massing on the frontier. You have two days before H-hour to judge where the blow will fall and thicken your line there; faded symbols mark Valdenmark divisions known only from pre-war reports. Hold Port Vesna and the corridor until the Korovian Western Group arrives from day 3 of the war.'],
     hist: 'An invented war: the Sarn Corridor design document, first slice. Valdenmark wins the scenario by holding Port Vesna and both corridor objectives at the end of day 21 of the war.' });
