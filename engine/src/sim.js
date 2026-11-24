@@ -676,6 +676,8 @@ function createSim(sc, player, seed, opt) {
     // computer staffs ask for drops for cut-off formations short of supply
     for (let s = 0; s < 2; s++) if (S.ai[s] && S.lift[s].left >= 1) { const F = S.forms.find(G => G.s === s && G.active && !G.dead && G.isolated && G.stock < G.cap * .3 && !S.dropQ[s].some(q => q.F === G)); if (F) { const h = F.hq && !F.hq.dead ? F.hq : { x: F.cx, y: F.cy }; S.reqDrop(s, F, h.x, h.y); } }
   }
+  // reachable regions for supply columns (truck moves, this side's block mask), labelled at most once per supply tick per side when a column is planned
+  const CC = [{ t: -1, lab: null }, { t: -1, lab: null }], colComp = s => { const q = CC[s]; if (q.t !== S.t) { q.lab = map.compLabel(1, S.zoc[s], q.lab); q.t = S.t; } return q.lab; };
   function supplyTick() {
     moraleTick(); dropTick();
     const M = m2o(), OA = OW.a; for (let s = 0; s < 2; s++) { const z = S.zoc[s]; z.fill(0); for (let c = 0; c < map.N; c++) if (OA[M[c]] !== s) z[c] = 1; const r = Math.ceil(1.2 / map.cs); for (const e of S.subs) if (e.s !== s && e.active && !e.dead && e.cls !== 'hq' && e.cls !== 'art' && e.coh > .2) { const ci = Math.floor(e.x / map.cs), cj = Math.floor(e.y / map.cs); for (let dj = -r; dj <= r; dj++) for (let di = -r; di <= r; di++) { const i = ci + di, j = cj + dj; if (i >= 0 && j >= 0 && i < map.W && j < map.H && di * di + dj * dj <= r * r) z[j * map.W + i] = 1; } } }
@@ -685,8 +687,14 @@ function createSim(sc, player, seed, opt) {
       for (const e of S.subs) if (e.s !== s && e.active && !e.dead && e.cls !== 'hq' && e.cls !== 'art' && e.coh > .2 && e.mv !== 'ship') { const ci = Math.floor(e.x / map.cs), cj = Math.floor(e.y / map.cs); for (let dj = -r; dj <= r; dj++) for (let di = -r; di <= r; di++) { const i = ci + di, j = cj + dj; if (i >= 0 && j >= 0 && i < map.W && j < map.H && di * di + dj * dj <= r * r) zE[j * map.W + i] = 1; } }
       // ground the enemy owns blocks the link too, as it does for supply columns
       for (let c = 0; c < map.N; c++) if (!zE[c] && OA[M[c]] === 1 - s) zE[c] = 1;
-      let n = 0; const st = []; for (let c = 0; c < map.N; c++) { if (lab[c] || zE[c] || map.fac[0][c] <= 0) continue; n++; lab[c] = n; st.push(c); while (st.length) { const q = st.pop(), i = q % map.W, j = (q / map.W) | 0; if (i > 0) vis(q - 1); if (i < map.W - 1) vis(q + 1); if (j > 0) vis(q - map.W); if (j < map.H - 1) vis(q + map.W); } }
-      function vis(c) { if (!lab[c] && !zE[c] && map.fac[0][c] > 0) { lab[c] = n; st.push(c); } } }
+      // connected regions, numbered in scan order as before; an explicit typed stack and inline neighbour tests for speed
+      const W = map.W, N = map.N, F0 = map.fac[0], ST = S.labSt || (S.labSt = new Int32Array(N + 8));
+      let n = 0; for (let c = 0; c < N; c++) { if (lab[c] || zE[c] || F0[c] <= 0) continue; n++; lab[c] = n; let sp = 0; ST[sp++] = c;
+        while (sp) { const q = ST[--sp], i = q % W; let k;
+          if (i > 0) { k = q - 1; if (!lab[k] && !zE[k] && F0[k] > 0) { lab[k] = n; ST[sp++] = k; } }
+          if (i < W - 1) { k = q + 1; if (!lab[k] && !zE[k] && F0[k] > 0) { lab[k] = n; ST[sp++] = k; } }
+          if (q >= W) { k = q - W; if (!lab[k] && !zE[k] && F0[k] > 0) { lab[k] = n; ST[sp++] = k; } }
+          if (q < N - W) { k = q + W; if (!lab[k] && !zE[k] && F0[k] > 0) { lab[k] = n; ST[sp++] = k; } } } } }
     const near = (s, x, y) => { const out = new Set(), lab = S.lab[s], r = Math.ceil(1.2 / map.cs), ci = Math.floor(x / map.cs), cj = Math.floor(y / map.cs); for (let dj = -r; dj <= r; dj++) for (let di = -r; di <= r; di++) { const i = ci + di, j = cj + dj; if (i >= 0 && j >= 0 && i < map.W && j < map.H && di * di + dj * dj <= r * r && lab[j * map.W + i]) out.add(lab[j * map.W + i]); } return out; };
     // a formation that has lost its headquarters links instead to the side's own network: another headquarters that is not cut off, or a working supply source
     const net = [null, null], netOf = s => { if (net[s]) return net[s]; const o = new Set(), add = (x, y) => { for (const l of near(s, x, y)) o.add(l); };
@@ -727,7 +735,7 @@ function createSim(sc, player, seed, opt) {
         const pr = S.supPrio(F), bad = F.badSrc && S.t < F.badSrc.until ? F.badSrc.src : null, list = S.src[F.s].filter(q => !q.captured && q.stock >= (pr < 0 ? Math.max(1, q.cap * .35) : 1) && S.t >= q.t * 60).sort((a, b) => (a === bad) - (b === bad) || Math.hypot(a.x - hx, a.y - hy) - Math.hypot(b.x - hx, b.y - hy));
         let sent = false;
         // a headquarters within 3 km of its own beach or depot draws straight from it
-        for (const q of list.slice(0, 3)) { const p = Math.hypot(q.x - hx, q.y - hy) < 3 ? [[q.x, q.y], [hx, hy]] : map.findPath(1, q.x, q.y, hx, hy, { block: S.zoc[F.s], grad: 3, road: q.air ? 0 : ROADBIAS }); if (p) { const off = q.air ? 0 : p.off || 0, rm = off <= OFFFREE ? 1 : Math.max(OFFMIN, 1 - OFFSLOPE * (off - OFFFREE)); F.offRd = off; F.offMul = rm;   // the last stretch off the road cuts what a column can carry
+        for (const q of list.slice(0, 3)) { const p = Math.hypot(q.x - hx, q.y - hy) < 3 ? [[q.x, q.y], [hx, hy]] : map.findPath(1, q.x, q.y, hx, hy, { block: S.zoc[F.s], grad: 3, road: q.air ? 0 : ROADBIAS, comp: colComp(F.s) }); if (p) { const off = q.air ? 0 : p.off || 0, rm = off <= OFFFREE ? 1 : Math.max(OFFMIN, 1 - OFFSLOPE * (off - OFFFREE)); F.offRd = off; F.offMul = rm;   // the last stretch off the road cuts what a column can carry
             if (rm >= 1) F.offMsgR = null; else if (S.t > (F.offMsgT || 0) && (F.offMsgR == null || rm < F.offMsgR - .1)) { F.offMsgT = S.t + 720; F.offMsgR = rm; say(F, 'Supply columns must drive ' + Math.round(off) + ' km off the road to reach us. Loads are down to ' + Math.round(rm * 100) + ' percent.', 1); }
             const load = Math.min(q.stock, F.cap - F.stock, 10 * rm * (pr > 0 ? 1.3 : pr < 0 ? .7 : 1)); q.stock -= load; F.supPath = p; const c = { id: S.nid++, s: F.s, F, src: q, path: p, pi: 1, x: p[0][0], y: p[0][1], hx: 1, hy: 0, load, load0: load, st: 'out', dead: false, trail: [] }; S.convoys.push(c); F.convoy = c; sent = true; break; } }
         F.convT = S.t + (sent ? 20 : 60);
@@ -1203,19 +1211,21 @@ function createSim(sc, player, seed, opt) {
 
   // ---------- main step ----------
   let tC = 0, tSup = 3, tAir = 2, tAi = 0, tBr = 1, tVp = 4, acc = 0;
+  // time spent in each part of the step, in milliseconds (S.TT), for tuning; performance.now is cheap at this rate
+  const TT = S.TT = {}, _T = (k, t) => { TT[k] = (TT[k] || 0) + performance.now() - t; };
   function step(dt) {
-    S.t += dt; S.lastDt = dt; if (S.cmdHook) S.cmdHook(); const h = S.hourOf(S.t); S.night = h < S.dayA || h > S.dayB;
+    S.t += dt; S.lastDt = dt; { const _h = performance.now(); if (S.cmdHook) S.cmdHook(); _T('hooks', _h); } const h = S.hourOf(S.t); S.night = h < S.dayA || h > S.dayB;
     const wi = Math.min(weather.length - 1, Math.floor(S.t / 720)); if (weather[wi] !== S.wx) { S.wx = weather[wi]; say(-1, 'Weather: ' + WXNAME[S.wx] + (S.wx === 'clear' || S.wx === 'cloud' ? '. Aircraft can fly.' : '. Air operations suspended.'), 1); }
-    moveSubs(dt); moveConvoys(dt); moveFlights(dt);
+    let _t = performance.now(); moveSubs(dt); moveConvoys(dt); moveFlights(dt); _T('move', _t);
     const war = !sc.hHour || S.t >= sc.hHour * 60;   // before H-hour (sc.hHour, hours) neither side fires or flies missions
-    if (S.t >= tC) { tC += 1; if (war) combatTick(); arrivals(); }
-    for (const F of S.forms) if (S.t >= F.nextT) { F.nextT += 5; cmdTick(F); }
-    if (S.t >= tSup) { tSup += 10; supplyTick(); }
-    if (S.t >= tAir) { tAir += 5; if (war) airTick(); }
-    if (S.t >= tBr) { tBr += 5; bridgeTick(); xingTick(); laneTick(); }
+    _t = performance.now(); if (S.t >= tC) { tC += 1; if (war) combatTick(); arrivals(); } _T('combat', _t);
+    _t = performance.now(); for (const F of S.forms) if (S.t >= F.nextT) { F.nextT += 5; cmdTick(F); } _T('cmdTick', _t);
+    _t = performance.now(); if (S.t >= tSup) { tSup += sc.supplyMin || 10; supplyTick(); } _T('supply', _t);
+    _t = performance.now(); if (S.t >= tAir) { tAir += 5; if (war) airTick(); } _T('air', _t);
+    _t = performance.now(); if (S.t >= tBr) { tBr += 5; bridgeTick(); xingTick(); laneTick(); } _T('bridge', _t);
     if (Math.floor(S.t / 60) !== Math.floor((S.t - dt) / 60)) S.lossH.push([Math.round(S.t / 60), S.losses[0], S.losses[1]]);   // hourly record for the end-screen timeline
-    if (S.t >= tVp) { tVp += 10; vpTick(); ownTick(Math.floor(S.t / 60) !== Math.floor((S.t - 10) / 60)); }
-    if (S.t >= tAi) { tAi += 30; aiTick(); }
+    _t = performance.now(); if (S.t >= tVp) { tVp += 10; vpTick(); ownTick(Math.floor(S.t / 60) !== Math.floor((S.t - 10) / 60)); } _T('own', _t);
+    _t = performance.now(); if (S.t >= tAi) { tAi += 30; aiTick(); } _T('ai', _t);
     if (S.t >= sc.hours * 60 && !S.over) { S.over = true; say(-1, 'Scenario time has expired.', 2); }
   }
   S.advance = function (gameMin, fixed) { if (S.over) return; S.planning = false; acc += gameMin; const dt = fixed || (gameMin > 2 ? 1 : gameMin > .6 ? .5 : .25); let n = 0; while (acc >= dt && n++ < 600 && !S.over) { S.pb = 40; step(dt); acc -= dt; } if (n >= 600) acc = 0; };
@@ -1238,10 +1248,17 @@ function createSim(sc, player, seed, opt) {
   }
   function ownTick(hourly) {
     // each cell within reach of troops in fighting order goes to the side whose troops are nearest (artillery reaches 0.8 km, other units 1.5 km)
-    const P = OW.pres, D = OW.dist || (OW.dist = [new Float32Array(OW.a.length), new Float32Array(OW.a.length)]); P[0].fill(0); P[1].fill(0); D[0].fill(99); D[1].fill(99);
-    const R0 = sc.ownR || 1.5;   // reach of a unit's hold on the ground (km); division-scale scenarios set more (game setting)
-    for (const u of S.subs) if (formed(u)) { const r = u.cls === 'art' ? R0 * .55 : R0, dd = D[u.s], pp = P[u.s], lead = LEADCLS[u.cls] || u.cls === 'at' || u.cls === 'eng'; disc(u.x, u.y, R0, c => { const i = c % OW.gw, j = (c / OW.gw) | 0, d = Math.hypot((i + .5) * OW.cw - u.x, (j + .5) * OW.cw - u.y) + R0 - r; if (d < dd[c]) dd[c] = d; if (lead && d < 1.2) pp[c] = 1; }); }
-    for (let c = 0; c < OW.a.length; c++) { const a = D[0][c], b = D[1][c]; if (Math.min(a, b) <= R0 && a !== b && !(OW.sea && OW.sea[c])) OW.a[c] = a < b ? 0 : 1; }
+    // only cells within reach of a unit can change, so the work runs over those cells alone: the cells touched last time are reset,
+    // this time's are listed as they are reached (same results as clearing and scanning the whole grid)
+    const NC = OW.a.length, P = OW.pres, D = OW.dist || (OW.dist = [new Float32Array(NC).fill(99), new Float32Array(NC).fill(99)]), TL = OW.tl || (OW.tl = new Int32Array(NC)), MK = OW.mk || (OW.mk = new Uint8Array(NC));
+    for (let k = 0; k < (OW.nt || 0); k++) { const c = TL[k]; D[0][c] = 99; D[1][c] = 99; P[0][c] = 0; P[1][c] = 0; MK[c] = 0; }
+    let nt = 0; const R0 = sc.ownR || 1.5, cw = OW.cw, gw = OW.gw, gh = OW.gh;   // R0: reach of a unit's hold on the ground (km); division-scale scenarios set more (game setting)
+    for (const u of S.subs) if (formed(u)) { const r = u.cls === 'art' ? R0 * .55 : R0, dd = D[u.s], pp = P[u.s], lead = LEADCLS[u.cls] || u.cls === 'at' || u.cls === 'eng', x = u.x, y = u.y;
+      const i0 = Math.max(0, Math.floor((x - R0) / cw)), i1 = Math.min(gw - 1, Math.floor((x + R0) / cw)), j0 = Math.max(0, Math.floor((y - R0) / cw)), j1 = Math.min(gh - 1, Math.floor((y + R0) / cw));
+      for (let j = j0; j <= j1; j++) for (let i = i0; i <= i1; i++) { const hd = Math.hypot((i + .5) * cw - x, (j + .5) * cw - y); if (hd > R0) continue;
+        const c = j * gw + i, d = hd + R0 - r; if (!MK[c]) { MK[c] = 1; TL[nt++] = c; } if (d < dd[c]) dd[c] = d; if (lead && d < 1.2) pp[c] = 1; } }
+    OW.nt = nt; const SEA0 = OW.sea;
+    for (let k = 0; k < nt; k++) { const c = TL[k], a = D[0][c], b = D[1][c]; if (Math.min(a, b) <= R0 && a !== b && !(SEA0 && SEA0[c])) OW.a[c] = a < b ? 0 : 1; }
     if (!hourly) return; const g = OW.gw, h = OW.gh;
     if (sc.ownMax) frontTick(g, h);
     const b = OW.a.slice();

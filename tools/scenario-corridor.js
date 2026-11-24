@@ -13,7 +13,8 @@ const fs = require('fs');
 const polyLen = l => l.reduce((a, p, i) => i ? a + Math.hypot(p[0] - l[i - 1][0], p[1] - l[i - 1][1]) : 0, 0);
 const polyAt = (l, d) => { let acc = 0; for (let i = 1; i < l.length; i++) { const s = Math.hypot(l[i][0] - l[i - 1][0], l[i][1] - l[i - 1][1]); if (acc + s >= d) { const t = s ? (d - acc) / s : 0; return { x: l[i - 1][0] + (l[i][0] - l[i - 1][0]) * t, y: l[i - 1][1] + (l[i][1] - l[i - 1][1]) * t }; } acc += s; } const e = l[l.length - 1]; return { x: e[0], y: e[1] }; };
 const inPoly = (x, y, p) => { let c = false; for (let i = 0, j = p.length - 1; i < p.length; j = i++) if ((p[i][1] > y) !== (p[j][1] > y) && x < (p[j][0] - p[i][0]) * (y - p[i][1]) / (p[j][1] - p[i][1]) + p[i][0]) c = !c; return c; };
-const WIN = { x0: 200, y0: 0, w: 760, h: 380 };
+// SC_WIN=full runs the same battle on the whole continent (a load test of map area)
+const WIN = process.env.SC_WIN === 'full' ? { x0: 0, y0: 0, w: 1400, h: 900 } : { x0: 200, y0: 0, w: 760, h: 380 };
 const START = '1940-05-30T04:00', HHOUR = 48, DAYS = 21;   // two days of tension, then three weeks of war
 const W = (x, y) => [+(x - WIN.x0).toFixed(2), +(y - WIN.y0).toFixed(2)];   // continent km -> window km
 const C = n => { const c = sarnMap.city(n); return W(c.x, c.y); };
@@ -124,7 +125,7 @@ function makeCorridor() {
     assets: [], sources: s ? sSrc : vSrc, pool: [], bases: s ? sBases : vBases, transport: { aircraft: 0 }, groups: s ? sGroups : vGroups }));
   const v0 = variants[0];
   return Object.assign({}, base, m, { id: 'corridor', title: 'Corridor Crisis', sub: 'Valdenmark against Sarn: two days of tension, then three weeks of war', start: START, hours: HHOUR + DAYS * 24, hHour: HHOUR,
-    ownCell: 1, ownR: 5, ownMax: 25, isoShrinkKm: 20, thin: [/^\d+(st|nd|rd|th) (\(\w+\) )?Division$/],   // Sarn's divisions stretch over long sectors (thin defence) aiExact: 1, labels: ['Valdenmark', 'Sarn'], divScale: [22, 70],
+    ownCell: +(process.env.SC_OWNCELL || 1), supplyMin: process.env.SC_SUPMIN ? +process.env.SC_SUPMIN : undefined, ownR: 5, ownMax: 25, isoShrinkKm: 20, thin: [/^\d+(st|nd|rd|th) (\(\w+\) )?Division$/],   // Sarn's divisions stretch over long sectors (thin defence) aiExact: 1, labels: ['Valdenmark', 'Sarn'], divScale: [22, 70],
     forms: v0.forms, commands: v0.commands, cmdPlan: v0.cmdPlan, corpsPlan: v0.corpsPlan, variants,
     armyAI: { only: ['vd-army', 'ko-army'], from: HHOUR + 30, frontKm: 5, reachKm: 70, cadenceH: 18, waitH: 30, supply: .3, pocketBonus: 2.5 },
     detourKm: 30, view: { x: 330, y: 190, dist: 230, pitch: 1.3 }, playerSides: [0, 1, -1],

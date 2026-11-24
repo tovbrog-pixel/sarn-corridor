@@ -65,6 +65,8 @@ function buildMap(sc) {
     if (near) { m.t[c] = T.BEACH; m.el[c] = 2; }
   }
   // coastal smoothing of elevation near sea
+  // A* heuristic table: HT[dx * H + dy] = Math.hypot(dx, dy) * 0.8 for cell offsets, the same values the search computed per step
+  let HT_ = null; const htab = () => HT_ || (HT_ = (() => { const z = new Float64Array(W * H); for (let dx = 0; dx < W; dx++) for (let dy = 0; dy < H; dy++) z[dx * H + dy] = Math.hypot(dx, dy) * .8; return z; })());
   const idx = (x, y) => { const i = Math.max(0, Math.min(W - 1, Math.floor(x / cs))), j = Math.max(0, Math.min(H - 1, Math.floor(y / cs))); return j * W + i; };
   m.idx = idx;
   function raster(pts, fn) { let pi = -1, pj = -1; for (const p of pts) { const i = Math.floor(p[0] / cs), j = Math.floor(p[1] / cs); if (i < 0 || j < 0 || i >= W || j >= H) { pi = -1; continue; } if (i === pi && j === pj) continue; if (pi >= 0 && i !== pi && j !== pj) fn(j * W + pi); fn(j * W + i); pi = i; pj = j; } }
@@ -139,12 +141,32 @@ function buildMap(sc) {
   // trucks keep to roads; desert, towns and beaches count as drivable ground for them
   const offRoad = c => !m.road[c] && m.t[c] !== T.DESERT && m.t[c] !== T.TOWN && m.t[c] !== T.CITY && m.t[c] !== T.BEACH && m.t[c] !== T.RIVER;
   m.pathCount = 0;
+  // regions a search can cross: cells with fac[k] > 0 that the block mask leaves open, joined orthogonally, or diagonally where
+  // both side cells are passable (the search's own move rules). findPath with opt.comp skips a search that cannot reach its goal.
+  m.compLabel = function (k, block, lab) {
+    const fac = m.fac[k], st = new Int32Array(N); lab = lab || new Int32Array(N); lab.fill(0); let n = 0;
+    const ok = c => fac[c] > 0 && !(block && block[c]);
+    for (let c0 = 0; c0 < N; c0++) { if (lab[c0] || !ok(c0)) continue; n++; lab[c0] = n; let sp = 0; st[sp++] = c0;
+      while (sp) { const c = st[--sp], ci = c % W, cj = (c / W) | 0;
+        for (let dj = -1; dj <= 1; dj++) for (let di = -1; di <= 1; di++) { if (!di && !dj) continue; const ni = ci + di, nj = cj + dj; if (ni < 0 || nj < 0 || ni >= W || nj >= H) continue; const q = nj * W + ni;
+          if (lab[q] || !ok(q)) continue; if (di && dj && (fac[cj * W + ni] <= 0 || fac[nj * W + ci] <= 0)) continue; lab[q] = n; st[sp++] = q; } } }
+    return lab;
+  };
+  // can a search from cell a reach cell b under the same rules? a expands even if blocked; b is accepted even if blocked
+  function canReach(k, lab, block, a, b) {
+    const fac = m.fac[k], nb = (c, f) => { const ci = c % W, cj = (c / W) | 0; for (let dj = -1; dj <= 1; dj++) for (let di = -1; di <= 1; di++) { if (!di && !dj) continue; const ni = ci + di, nj = cj + dj; if (ni < 0 || nj < 0 || ni >= W || nj >= H) continue; const q = nj * W + ni; if (fac[q] <= 0) continue; if (di && dj && (fac[cj * W + ni] <= 0 || fac[nj * W + ci] <= 0)) continue; if (f(q)) return true; } return false; };
+    const from = new Set(); nb(a, q => { if (q === b) { from.add(-1); return true; } if (lab[q]) from.add(lab[q]); return false; });
+    if (from.has(-1)) return fac[b] > 0; if (!from.size || fac[b] <= 0) return false;
+    if (lab[b] && from.has(lab[b])) return true;
+    return nb(b, q => lab[q] > 0 && from.has(lab[q]));
+  }
   m.findPath = function (k, sx, sy, gx, gy, opt) {
     m.pathCount++; opt = opt || {}; const fac = (opt.cross ? m.facX : m.fac)[k], block = opt.block, threat = opt.threat, rb = opt.road || 0;   // rb: extra cost on ground with no road (supply columns)
     const s0 = m.snap(k, sx, sy, 3), g0 = m.snap(k, gx, gy, opt.grad || 4); if (!s0 || !g0) return null;
     const sc0 = idx(s0[0], s0[1]), gc = idx(g0[0], g0[1]), gi = gc % W, gj = (gc / W) | 0;
     if (sc0 === gc) return [[g0[0], g0[1]]];
-    gen++; hp.length = 0; hf.length = 0; g[sc0] = 0; stamp[sc0] = gen; from[sc0] = -1; push(sc0, 0);
+    if (opt.comp && !canReach(k, opt.comp, block, sc0, gc)) return null;   // the search would fail: skip it
+    const HT = htab(); gen++; hp.length = 0; hf.length = 0; g[sc0] = 0; stamp[sc0] = gen; from[sc0] = -1; push(sc0, 0);
     let found = false, it = 0; const maxIt = opt.maxIt || N * 2;
     while (hp.length && it++ < maxIt) {
       const c = pop(); if (closed[c] === gen) continue; closed[c] = gen; if (c === gc) { found = true; break; }
@@ -155,7 +177,7 @@ function buildMap(sc) {
         if (di && dj && (fac[cj * W + ni] <= 0 || fac[nj * W + ci] <= 0)) continue;
         let cost = (di && dj ? 1.4142 : 1) / f; if (rb && offRoad(n)) cost *= rb; if (threat) cost += threat[n];
         const ng = gcst + cost;
-        if (stamp[n] !== gen || ng < g[n]) { g[n] = ng; stamp[n] = gen; from[n] = c; push(n, ng + Math.hypot(ni - gi, nj - gj) * .8); }
+        if (stamp[n] !== gen || ng < g[n]) { g[n] = ng; stamp[n] = gen; from[n] = c; push(n, ng + HT[(ni > gi ? ni - gi : gi - ni) * H + (nj > gj ? nj - gj : gj - nj)]); }
       }
     }
     if (!found) return null;

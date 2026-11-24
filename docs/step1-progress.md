@@ -86,3 +86,20 @@ Tov asked for divisions and corps to advance as a line, over open ground near th
   - Captures (battalion / regiment): Vesna crossing 6 Jun / 4 Jun; Corridor south 7 Jun / 6 Jun; Sarnow 11 Jun / 9 Jun; Port Vesna by neither.
   - Losses at 12 Jun (V / S): battalion 70 / 44; regiment 33 / 74.
 - **Profile after the fix (regiment level):** ownership tick 22%, path finding 20%, step 13%, supply flood 12%, combat 5%. Map-wide work costs more than unit count.
+
+## Speed work, step 2 (24 Nov 2026)
+
+Exact changes (results identical: `node tools/regress.js` matches, and the corridor run of seed 101 matches line for line):
+- **Held ground:** the 10-minute update works only on cells within reach of a unit, listed as it goes, instead of clearing and scanning the whole grid.
+- **Supply columns:** before a route search, a check of whether the depot can reach the headquarters at all. Each side's reachable regions are labelled once per supply tick, by the search's own move rules. 386 of 547 column searches had been failing, and each failure searched every reachable cell.
+- **Path finder:** the A* estimate reads a table of the same `Math.hypot` values.
+- **Supply flood:** a typed stack and inline neighbour tests.
+- **Timing:** `S.TT` holds the milliseconds spent in each part of the step.
+
+Corridor, 120 h, seed 101, run alone: 79.5 s before, 55.7 s after.
+
+Continent load test (`SC_WIN=full`: the same battle on the whole 1,400 x 900 km map), 120 h: 154 s before, 103 s after.
+
+Coarser settings, tested on four seeds over 288 h:
+- **`ownCell: 2`** (held ground on 2 km cells): plays like the default. Seeds 202 and 303: losses 36 / 68 and 37 / 63, against 31 / 66 and 34 / 56 by default, with similar capture dates. Safe to use on the continent.
+- **`supplyMin: 30`** (supply checked every 30 minutes instead of 10): Valdenmark losses drop to 18-26 and Sarn's to 45-48. It changes the battle, so it stays off.
