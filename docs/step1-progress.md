@@ -38,3 +38,13 @@ Valdenmark took Tarnek on day 2, Port Vesna on day 8 and the southern corridor o
 ## Open: the Valdenmark AI bypasses strongpoints
 
 In a 14-day run Valdenmark took only the Vesna crossing. Its divisions pass between Sarn's dug-in divisions, which keep Port Vesna and the corridor towns from inside their pockets. Next: AI corps that reduce bypassed pockets, and cut-off divisions that weaken and surrender as the design document sets out.
+
+## Pockets that starve and shrink, AI that reduces them (23 Nov 2026, later)
+
+- **Shrinking pockets.** A cut-off formation's troops count as up to `isoShrinkKm` km farther away as its supply and strength run down (`frontTick`), so the encircling side takes a pocket's outer ground while the defenders keep the ground they stand on. The engine's existing rules then weaken cut-off units (about 1 percent a day, 4 percent with falling cohesion once stocks are gone) and make them surrender when shattered, out of ammunition and outnumbered. The corridor sets 20 km (game setting).
+- **Ports.** A pocket holding a working port is a pocket with a supply source, so it stays open and supplied at the port's rate. Sea control and blockade, which should cut such ports, come with the sea zones.
+- **AI reduces pockets.** `armyAI.pocketBonus` (2.5 here) raises the score of an enemy-held objective standing on the army's own ground.
+
+**Run, seed 101, 504 game hours:** Valdenmark took Tarnek, Sarnow, the Vesna crossing, the southern corridor and six of seven villages; losses 17 against 36 battalion-equivalents. Port Vesna held out to the end, supplied through its port, so the corridor victory was not met. Korovia took Varnholm. 602 s, 485 battalions.
+
+`docs/engine-fixes-for-france-1944.md` and `.patch` carry the engine fixes to the France build.

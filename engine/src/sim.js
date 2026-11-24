@@ -1256,7 +1256,10 @@ function createSim(sc, player, seed, opt) {
     const N = g * h, cw = OW.cw, SEA = OW.sea || (OW.sea = (() => { const z = new Uint8Array(N); for (let c = 0; c < N; c++) { const x = (c % g + .5) * cw, y = (((c / g) | 0) + .5) * cw; z[c] = map.t[Math.min(map.H - 1, Math.floor(y / map.cs)) * map.W + Math.min(map.W - 1, Math.floor(x / map.cs))] === T.SEA ? 1 : 0; } return z; })());
     const D = OW.fd || (OW.fd = [new Float32Array(N), new Float32Array(N)]), d1 = cw, d2 = cw * Math.SQRT2, cell = (x, y) => clamp(Math.floor(y / cw), 0, h - 1) * g + clamp(Math.floor(x / cw), 0, g - 1);
     for (let s = 0; s < 2; s++) { const d = D[s]; d.fill(1e9);
-      for (const u of S.subs) if (u.s === s && u.active && !u.dead && u.mv !== 'ship' && u.coh > .2 && u.cls !== 'hq') d[cell(u.x, u.y)] = 0;
+      // a cut-off formation's hold weakens as its supply and strength run down: its troops count as farther away, so the encircling
+      // side takes the pocket's outer ground hour by hour while the defenders keep the ground they stand on (isoShrinkKm, game setting)
+      const K = sc.isoShrinkKm || 0;
+      for (const u of S.subs) if (u.s === s && u.active && !u.dead && u.mv !== 'ship' && u.coh > .2 && u.cls !== 'hq') { const F = u.f, off = K && F && F.isolated ? K * (1 - Math.min(1, F.stock / Math.max(1, F.cap))) * .7 + K * (1 - Math.min(1, u.str)) * .3 : 0, c = cell(u.x, u.y); if (off < d[c]) d[c] = off; }
       // two-pass chamfer distance; sea cells pass nothing on
       for (let j = 0; j < h; j++) for (let i = 0; i < g; i++) { const c = j * g + i; if (SEA[c]) continue; let v = d[c];
         if (i > 0 && d[c - 1] + d1 < v) v = d[c - 1] + d1; if (j > 0) { if (d[c - g] + d1 < v) v = d[c - g] + d1; if (i > 0 && d[c - g - 1] + d2 < v) v = d[c - g - 1] + d2; if (i < g - 1 && d[c - g + 1] + d2 < v) v = d[c - g + 1] + d2; } d[c] = v; }

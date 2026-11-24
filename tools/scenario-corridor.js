@@ -108,7 +108,7 @@ function makeCorridor() {
     assets: [], sources: s ? sSrc : vSrc, pool: [], bases: s ? sBases : vBases, transport: { aircraft: 0 }, groups: s ? sGroups : vGroups }));
 
   return Object.assign({}, base, m, { id: 'corridor', title: 'Corridor Crisis', sub: 'Valdenmark against Sarn, 1 to 21 June', start: START, hours: hrs(DAYS),
-    ownCell: 1, ownR: 5, ownMax: 25, aiExact: 1, labels: ['Valdenmark', 'Sarn'], divScale: [22, 70], commands, cmdPlan, corpsPlan, armyAI: { only: ['vd-army', 'ko-army'], from: 30, frontKm: 5, reachKm: 70, cadenceH: 18, waitH: 30, supply: .3 }, detourKm: 30, view: { x: 330, y: 150, dist: 150, pitch: 1.3 }, playerSides: [0, 1, -1],
+    ownCell: 1, ownR: 5, ownMax: 25, isoShrinkKm: 20, aiExact: 1, labels: ['Valdenmark', 'Sarn'], divScale: [22, 70], commands, cmdPlan, corpsPlan, armyAI: { only: ['vd-army', 'ko-army'], from: 30, frontKm: 5, reachKm: 70, pocketBonus: 2.5, cadenceH: 18, waitH: 30, supply: .3 }, detourKm: 30, view: { x: 330, y: 150, dist: 150, pitch: 1.3 }, playerSides: [0, 1, -1],
     modules: ['transport', 'air', 'command', 'repl'],
     repl: { pools: [{ k: 'vd', n: 'Valdenmark depots', s: 0, nat: ['GE'], perDay: [{ from: 0, n: 1.2 }], xp: .85 },
       { k: 'sa', n: 'Sarn reserves', s: 1, nat: ['IT'], perDay: [{ from: 0, n: .5 }], xp: .75 },
