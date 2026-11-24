@@ -103,3 +103,18 @@ Continent load test (`SC_WIN=full`: the same battle on the whole 1,400 x 900 km 
 Coarser settings, tested on four seeds over 288 h:
 - **`ownCell: 2`** (held ground on 2 km cells): plays like the default. Seeds 202 and 303: losses 36 / 68 and 37 / 63, against 31 / 66 and 34 / 56 by default, with similar capture dates. Safe to use on the continent.
 - **`supplyMin: 30`** (supply checked every 30 minutes instead of 10): Valdenmark losses drop to 18-26 and Sarn's to 45-48. It changes the battle, so it stays off.
+
+## Town and city fighting (24 Nov 2026)
+
+Applied from france-1944 (`docs/town-and-city-fighting-for-sarn-corridor.md` and its patch): `engine/src/urban.js`, the capture rule, the town-fire multipliers, the corps commander's handling of towns and the general's warning, plus the four hand edits (module table, loader, app builder, page builder with `urban`, `districts` and `capBig` kept). Corridor Crisis lists the `urban` module. No districts: no Sarn Corridor city is large enough at 1 km cells.
+
+- `node tools/regress.js`: all scenarios match.
+- **Built-up areas at start:**
+  - Sarnow 12 cells and Halden 12.
+  - Port Vesna 6, Freyburg 4 and Brennhaven 4.
+  - Every other objective, Tarnek and Ostrand included, keeps the 1.2 km rule. Towns of size 1 cover one or two cells, and Ostrand loses cells to the sea.
+- **Corps test:** two infantry divisions and the 1st Panzer, with an objective line across Sarnow.
+  - Default order: the panzer division goes to reserve, with the note "Sarnow is infantry work".
+  - With `reserve: false`: 3rd Infantry takes the town's stretch and the panzer division keeps 1.5 km beside it.
+- **The general's warning** appeared when the 1st Panzer was ordered into Sarnow alone.
+- **Four seeds, 288 h, with the rules against without:** seeds 101 and 202 identical; 303 and 404 differ by one or two loss points; capture dates unchanged. The rules hardly fire, because the towns are small on this map: a size-2 town is drawn with a 0.95 km radius, a size-1 town 0.4 km.

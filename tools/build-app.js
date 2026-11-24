@@ -3,7 +3,7 @@
 // Run from the repository root: node tools/build-app.js
 const fs = require('fs'), path = require('path');
 const root = path.join(__dirname, '..');
-const engineFiles = ['data.js', 'divisions.js', 'map.js', 'scenarios.js', 'tutorial.js', 'balance.js', 'commanders.js', 'guidance.js', 'sim.js', 'command.js', 'transport.js', 'air.js', 'politics.js', 'theater.js', 'replace.js', 'doctrine.js', 'assess.js'];
+const engineFiles = ['data.js', 'divisions.js', 'map.js', 'scenarios.js', 'tutorial.js', 'balance.js', 'commanders.js', 'guidance.js', 'sim.js', 'command.js', 'transport.js', 'air.js', 'politics.js', 'theater.js', 'replace.js', 'doctrine.js', 'urban.js', 'assess.js'];
 const outEngine = path.join(root, 'app', 'engine'), outVendor = path.join(root, 'app', 'vendor');
 fs.mkdirSync(outEngine, { recursive: true }); fs.mkdirSync(outVendor, { recursive: true });
 for (const f of engineFiles) fs.copyFileSync(path.join(root, 'engine', 'src', f), path.join(outEngine, f));

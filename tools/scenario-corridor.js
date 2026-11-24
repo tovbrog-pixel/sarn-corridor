@@ -129,7 +129,7 @@ function makeCorridor() {
     forms: v0.forms, commands: v0.commands, cmdPlan: v0.cmdPlan, corpsPlan: v0.corpsPlan, variants,
     armyAI: { only: ['vd-army', 'ko-army'], from: HHOUR + 30, frontKm: 5, reachKm: 70, cadenceH: 18, waitH: 30, supply: .3, pocketBonus: 2.5 },
     detourKm: 30, view: { x: 330, y: 190, dist: 230, pitch: 1.3 }, playerSides: [0, 1, -1],
-    modules: ['transport', 'air', 'command', 'repl', 'doctrine', 'intel'],
+    modules: ['transport', 'air', 'command', 'repl', 'doctrine', 'intel', 'urban'],
     intel: { known: [.8, .6], rearMul: .55, errKm: [4, 14], named: [.6, .4], frontKm: 30 },
     repl: { pools: [{ k: 'vd', n: 'Valdenmark depots', s: 0, nat: ['GE'], perDay: [{ from: HHOUR, n: 2.5 }], xp: .85 },
       { k: 'sa', n: 'Sarn reserves', s: 1, nat: ['IT'], perDay: [{ from: HHOUR, n: 1 }], xp: .75 },

@@ -39,14 +39,27 @@ function attachCommand(S) {
     const at = kids.map(c => ({ c, p: pos(c) || p0 })).sort((a, b) => ((b.p[0] - p0[0]) * px + (b.p[1] - p0[1]) * py) - ((a.p[0] - p0[0]) * px + (a.p[1] - p0[1]) * py));
     // a reserve: cautious commanders hold one child back when they have three or more
     const ag = C.cmd ? C.cmd.ag : .5; let reserve = null;
-    if (opt.reserve !== false && at.length >= 3 && (opt.reserve === true || ag < .65)) {
+    // towns on the objective (urban module): the stretches of the line that lie in the built-up area of an enemy-held town
+    const armd = n => !n.forms && n.subs && (() => { const us = n.subs.filter(u => !u.dead && LEADCLS[u.cls]); return us.length > 0 && us.filter(u => u.cls === 'arm').length * 3 >= us.length; })();   // an armored division: a third or more of its leading battalions are tanks, the map symbol's own test
+    const towns = []; let townN = null; if (S.urban && S.townAt) { let open = null; for (let d = 0; d <= L; d += .5) { const q = polyAt(ln, d), v = S.townAt(q.x, q.y), hit = v && v.own !== C.s; if (hit) { townN = townN || v.n; if (open == null) open = d; } if ((!hit || d + .5 > L) && open != null) { towns.push([Math.max(0, open - .5), Math.min(L, d + (hit ? .5 : 0))]); open = null; } } }
+    let note = '';
+    if (towns.length && opt.reserve !== false && at.length >= 3 && at.filter(o => !armd(o.c)).length >= 2 && at.some(o => armd(o.c))) {
+      // a town fight is infantry work: the armored division waits in reserve, whatever its place in the line
+      let ri = -1, bw = 1e9; at.forEach((o, i) => { if (armd(o.c) && weight(o.c) < bw) { bw = weight(o.c); ri = i; } }); reserve = at.splice(ri, 1)[0]; note = reserve.c.n + ' is held in reserve: ' + townN + ' is infantry work.';
+    } else if (opt.reserve !== false && at.length >= 3 && (opt.reserve === true || ag < .65)) {
       let ri = 0, bw = 1e9; at.forEach((o, i) => { const w = weight(o.c); if (i > 0 && i < at.length - 1 && w < bw) { bw = w; ri = i; } }); if (!ri) ri = Math.floor(at.length / 2);
       reserve = at.splice(ri, 1)[0];
     }
     const W = at.reduce((s, o) => s + Math.max(1, weight(o.c)), 0); let acc = 0; const out = [];
     const P = (path && path.length ? path : []).filter(q => q);
-    for (const o of at) {
-      const w = Math.max(1, weight(o.c)), a = acc / W * L, b = (acc + w) / W * L; acc += w;
+    const bnd = [0]; for (const o of at) { acc += Math.max(1, weight(o.c)); bnd.push(acc / W * L); }
+    // an armored division forward beside an infantry division: the boundary moves so the town lies in the infantry's sector
+    if (towns.length) for (let i = 0; i < at.length; i++) { if (!armd(at[i].c)) continue; for (const [c0, c1] of towns) { const a = bnd[i], b = bnd[i + 1], wd = b - a; if (c1 <= a || c0 >= b || wd < 3) continue;
+        const lf = i > 0 && !armd(at[i - 1].c), rt = i < at.length - 1 && !armd(at[i + 1].c), nearL = (c0 + c1) / 2 - a <= b - (c0 + c1) / 2;   // the infantry neighbour on the town's side takes it; the armor keeps at least 1.5 km beside the town
+        if (lf && (nearL || !rt)) { bnd[i] = Math.min(c1, b - 1.5); note = note || at[i - 1].c.n + ' takes ' + townN + '; ' + at[i].c.n + ' attacks beside it.'; }
+        else if (rt) { bnd[i + 1] = Math.max(c0, a + 1.5); note = note || at[i + 1].c.n + ' takes ' + townN + '; ' + at[i].c.n + ' attacks beside it.'; } } }
+    for (let i = 0; i < at.length; i++) { const o = at[i];
+      const a = bnd[i], b = bnd[i + 1];
       const seg = segOf(ln, a, b), sm = polyAt(ln, (a + b) / 2), off = side([sm.x, sm.y]);
       const cp = P.map(q => [q[0] + px * off, q[1] + py * off]);          // corps route shifted to the child's sector
       out.push({ child: o.c, path: cp, line: seg, reserve: false });
@@ -56,7 +69,7 @@ function attachCommand(S) {
       const bx = mid.x - ax * 6 + px * roff, by = mid.y - ay * 6 + py * roff;
       out.push({ child: reserve.c, path: P.map(q => [q[0] + px * roff, q[1] + py * roff]), line: [[bx + px * hw, by + py * hw], [bx - px * hw, by - py * hw]], reserve: true });
     }
-    return out;
+    out.note = note; return out;
   };
 
   // issue an order to a node: staff time first, then the children receive theirs
@@ -74,6 +87,7 @@ function attachCommand(S) {
     O.nextReview = S.t + 60; O.lastAct = -1e9;
     C.status = 'Orders passed to ' + plan.length + (plan.some(q => q.reserve) ? ', one in reserve' : '');
     report(C, 'orders passed to ' + plan.map(q => q.child.n + (q.reserve ? ' (reserve)' : '')).join(', ') + '.');
+    if (plan.note) report(C, plan.note);
   }
   function send(child, path, line, opt, reserve, then) {
     const o = Object.assign({}, opt, reserve ? { then: 'reserve' } : {}, then ? { then } : {}); delete o.reserve;

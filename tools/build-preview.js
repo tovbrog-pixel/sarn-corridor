@@ -6,7 +6,7 @@ const out = process.argv[2] || '/tmp/preview'; fs.mkdirSync(out, { recursive: tr
 const which = process.argv[3] || 'corridor', menu = process.argv[4] === 'menu', side = menu ? -1 : +(process.argv[4] == null ? -1 : process.argv[4]);   // 'menu': open on the scenario menu (the desktop app)
 const sc = require('./scenario-corridor')();
 const b64 = a => Buffer.from(a.buffer, a.byteOffset, a.byteLength).toString('base64');
-const keep = ['supplyMin', 'id', 'title', 'sub', 'modules', 'front', 'detourKm', 'aiExact', 'divScale', 'view', 'phaseLines', 'fieldPlan', 'commands', 'cmdPlan', 'politics', 'brief', 'hist', 'ports', 'beach', 'w', 'h', 'cs', 'realLines', 'rivers', 'roads', 'rails', 'towns', 'ownCell', 'thin', 'ownR', 'ownMax', 'isoShrinkKm', 'variants', 'hHour', 'intel', 'corpsPlan', 'armyAI', 'repl', 'playerSides', 'labels', 'hours', 'start', 'forest', 'rough', 'marsh', 'bridges', 'vp', 'weather', 'forms'];
+const keep = ['urban', 'districts', 'capBig', 'supplyMin', 'id', 'title', 'sub', 'modules', 'front', 'detourKm', 'aiExact', 'divScale', 'view', 'phaseLines', 'fieldPlan', 'commands', 'cmdPlan', 'politics', 'brief', 'hist', 'ports', 'beach', 'w', 'h', 'cs', 'realLines', 'rivers', 'roads', 'rails', 'towns', 'ownCell', 'thin', 'ownR', 'ownMax', 'isoShrinkKm', 'variants', 'hHour', 'intel', 'corpsPlan', 'armyAI', 'repl', 'playerSides', 'labels', 'hours', 'start', 'forest', 'rough', 'marsh', 'bridges', 'vp', 'weather', 'forms'];
 const D = {}; for (const k of keep) D[k] = sc[k];
 if (sc.thin) D.thin = sc.thin.map(r => r.source);   // regular expressions travel as their source text
 D.raster = { w: sc.raster.w, h: sc.raster.h, t: b64(sc.raster.t), el: b64(sc.raster.el) };
@@ -21,7 +21,7 @@ const inject = `
   delete sc.sideOv; SCENARIOS.unshift(sc); ${menu ? "for (let i = SCENARIOS.length - 1; i >= 0; i--) if (!['corridor'].includes(SCENARIOS[i].id)) SCENARIOS.splice(i, 1);" : ''} ${menu ? '' : 'window.AUTOSTART = '}${menu ? '' : '[0, ' + side + ', 1, 1]'}${menu ? '' : ';'}
 })();
 `;
-const order = ['data.js', 'divisions.js', 'map.js', 'scenarios.js', 'tutorial.js', 'balance.js', 'commanders.js', 'guidance.js', 'models.js', 'sim.js', 'command.js', 'transport.js', 'air.js', 'politics.js', 'theater.js', 'replace.js', 'doctrine.js', 'assess.js', 'render.js', 'render2.js', 'render3.js', 'sound.js'];
+const order = ['data.js', 'divisions.js', 'map.js', 'scenarios.js', 'tutorial.js', 'balance.js', 'commanders.js', 'guidance.js', 'models.js', 'sim.js', 'command.js', 'transport.js', 'air.js', 'politics.js', 'theater.js', 'replace.js', 'doctrine.js', 'urban.js', 'assess.js', 'render.js', 'render2.js', 'render3.js', 'sound.js'];
 // recorded chief-of-staff clips, built into the page when a voice folder is given (env VOICE_DIR): the single file then needs no folder beside it
 const vdir = process.env.VOICE_DIR, VO = {}; if (vdir && fs.existsSync(vdir)) for (const f of fs.readdirSync(vdir)) if (f.endsWith('.mp3')) VO[f.slice(0, -4)] = 'data:audio/mpeg;base64,' + fs.readFileSync(path.join(vdir, f)).toString('base64');
 let code = 'window.VOICE = ' + JSON.stringify(VO) + ';\n' + order.map(f => fs.readFileSync(path.join(src, f), 'utf8')).join('\n;\n') + '\n;\n' + inject + '\n;\n' + fs.readFileSync(path.join(src, 'ui.js'), 'utf8');
