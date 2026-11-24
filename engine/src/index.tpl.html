@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <meta name="author" content="Tov Binyamin Brog">
-<title>Lines of Advance: Operational Command 1943-44</title>
+<title>Sarn Corridor: Operational Command</title>
 <style>
 :root{--ink:#1f1d19;--paper:#ece5d0;--paper2:#e0d7bd;--od:#2c3024;--od2:#3b4030;--rule:#8a826a;--red:#a3271f;--blue:#27508f;--amber:#d9a520}
 *{box-sizing:border-box}html,body{margin:0;height:100%;overflow:hidden;background:#191a18;color:var(--ink);font:13px/1.35 "Courier New",Courier,monospace}
@@ -72,7 +72,7 @@ table{width:100%;border-collapse:collapse;font-size:11.5px;margin-top:4px}th{tex
  <div id="left"><div id="tabs"><span class="grip" title="Drag to move the panel. Double-click to put it back.">::</span><button data-tab="forces" class="on" title="Your formations, grouped by corps. Click a name to select it and move the map to it.">Forces</button><button data-tab="air" title="Your squadrons and their roles, with the zones you mark for interdiction, bombing and reconnaissance.">Air</button><button data-tab="support" title="Battalions held at your level: artillery, engineers, tanks and others. Select a division, then attach them here.">Support</button><button class="fold" data-fold="left" title="Fold or unfold the panel">&ndash;</button></div><div id="panel"></div></div>
  <div id="card"></div><div id="log"><div class="lbar"><span class="grip" title="Drag to move the reports. Double-click to put them back.">::</span><b>Reports</b><button data-lf="all" class="on" title="Show every report.">All</button><button data-lf="alert" title="Show only the reports that need a decision. Key N jumps the map to the latest one.">Alerts</button><button data-lf="sel" title="Reports from the selected formation">Selected</button><button class="fold" data-fold="log" title="Fold or unfold the reports">&ndash;</button></div><div id="logrows"></div></div><div id="tip"></div><div id="toast"></div><div id="pausebar"></div><div id="modehint"></div><div id="tut"></div>
 </div>
-<div id="menu" class="ovl"><div><h1>Lines of Advance<small>Operational command, 1943-44. You draw the lines. Your commanders fight the battle.</small></h1><div id="sclist"></div><div id="scinfo"></div><button id="go" class="go">Open the map</button><div id="saves"></div></div></div>
+<div id="menu" class="ovl"><div><h1>Sarn Corridor<small>Operational command in an invented war, 1940. You draw the lines. Your commanders fight the battle.</small></h1><div id="sclist"></div><div id="scinfo"></div><button id="go" class="go">Open the map</button><div id="saves"></div></div></div>
 <div id="savedlg" class="ovl"><div><h2>Save the battle</h2><p>Name <input id="savename" maxlength="40" style="width:260px"></p><p class="note">A save holds the scenario, its settings and every order you gave. Loading replays the battle to the saved minute, which takes longer the later you saved. A save from an earlier version still loads: each order goes to the formation it named, and the battle replays under the new rules, so it may turn out differently.</p><button data-sv="local" class="go">Save in this browser</button> <button data-sv="file">Download a save file</button> <button data-sv="cancel">Cancel</button></div></div>
 <div id="loading" class="ovl">Preparing the map table...</div>
 <div id="help" class="ovl"><div><h2>How to command</h2><ul>
@@ -132,7 +132,7 @@ table{width:100%;border-collapse:collapse;font-size:11.5px;margin-top:4px}th{tex
 <li><b>Clock:</b> Space pauses, 1-4 set speed. Watch a fight at 1x; use 12x or 40x for approach marches.</li></ul><p class="note">Orders of battle, commanders and equipment figures are compiled from general reference knowledge and simplified to battalion level. Treat unit lists and performance numbers as approximate until checked against a named source.</p><p>Click anywhere to close.</p></div></div>
 <div id="confirm" class="ovl"><div style="max-width:620px"><p style="white-space:pre-line"></p><button data-yes="1" class="go">Relieve him</button> <button>Cancel</button></div></div>
 <div id="end" class="ovl"></div>
-<div id="intro" class="ovl"><div><h1>Lines of Advance</h1><div class="sub">Operational command, 1943-44</div>
+<div id="intro" class="ovl"><div><h1>Sarn Corridor</h1><div class="sub">Operational command in an invented war, 1940</div>
 <p>You command a corps or an army in real time. For each formation you draw a line of advance and an objective line. Its commander chooses the route, deploys his battalions, digs in, and calls for guns and air support himself. You decide where, when and with what.</p>
 <p>Supply, weather, terrain and fog of war shape every battle. Orders take staff time, plans meet friction, and an opponent that learns from its mistakes answers each move. Tell a formation what to do on arrival (hold, dig in, rest, exploit, delay or reserve) and it carries on without you.</p>
 <p id="introsc"></p>

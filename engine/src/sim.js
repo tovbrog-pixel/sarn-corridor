@@ -23,7 +23,7 @@ const WXNAME = { clear: 'Clear', cloud: 'Scattered cloud', overcast: 'Overcast',
 
 const DIFF = [
   { n: 'Staff exercise', xp: .9, sup: .8, react: 1.5, arr: 1.1, delay: .75 },
-  { n: 'Historical', xp: 1, sup: 1, react: 1, arr: 1, delay: 1 },
+  { n: 'Standard', xp: 1, sup: 1, react: 1, arr: 1, delay: 1 },
   { n: 'Veteran opponent', xp: 1.08, sup: 1.2, react: .7, arr: .95, delay: 1.15 },
   { n: 'Supreme command', xp: 1.15, sup: 1.4, react: .5, arr: .88, delay: 1.3 }];
 const FRICTION = ['As planned', 'Variable', 'Chaotic'];
