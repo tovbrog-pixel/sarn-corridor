@@ -1,0 +1,35 @@
+diff --git a/engine/src/render3.js b/engine/src/render3.js
+index 2234700..c2a509a 100644
+--- a/engine/src/render3.js
++++ b/engine/src/render3.js
+@@ -166,13 +166,15 @@ function initOverlay(R, cv) {
+     // detail by zoom on division-scale scenarios (sc.divScale: [regiment zoom, division zoom] in km of camera distance): one symbol per
+     // division at theatre zoom, one per regiment, brigade or combat command at middle zoom, battalions close in
+     const DS = S.sc.divScale, lod = DS ? (cam.dist > DS[1] ? 2 : cam.dist > DS[0] ? 1 : 0) : 0; R.lod = lod;
++    // labels that would overlap a label already drawn this frame are left off (the symbol still shows)
++    const LB = [], lbl = (q, s) => { const w = s.length * 6.5 + 8; if (LB.some(b => Math.abs(b[0] - q[0]) < (b[2] + w) / 2 && Math.abs(b[1] - q[1]) < 14)) return ''; LB.push([q[0], q[1], w]); return s; };
+     if (lod) for (const F of S.forms) { if (!F.active || F.dead) continue; const live = F.subs.filter(u => u.active && !u.dead); if (!live.length) continue; const own = mine(F.s), seen = live.filter(u => u.vis); if (!own && !seen.length) continue;
+       const isDiv = F.regs && F.regs.filter(q => q.role === 'man').length >= 2, tot = F.subs.reduce((a, u) => a + u.size, 0) || 1, str = live.reduce((a, u) => a + u.size * u.str, 0) / tot, arm = live.filter(u => u.cls === 'arm').length * 3 >= live.length;
+       if (lod === 2 || !F.regs) { const q = R.project(F.cx, F.cy, .3); if (!q || q[0] < -40 || q[0] > W + 40 || q[1] < -40 || q[1] > H + 40) continue;
+-        bigCounter(q[0], q[1], 1.5, F, arm ? 'arm' : live[0].cls === 'art' ? 'art' : 'inf', isDiv ? 'XX' : live.length > 2 ? 'X' : 'II', F.n.replace(/ (Infantry |Armou?red |Airborne )?Division.*| \(.*/, m => /Armou?red/.test(m) ? ' Armd' : /Airborne/.test(m) ? ' Abn' : '').replace(/^(\d+)(st|nd|rd|th)\b/, '$1'), str, R.sel === F, own); R.hits.push([live[0], q[0], q[1]]); }
++        bigCounter(q[0], q[1], 1.5, F, arm ? 'arm' : live[0].cls === 'art' ? 'art' : 'inf', isDiv ? 'XX' : live.length > 2 ? 'X' : 'II', lbl(q, F.n.replace(/ (Infantry |Armou?red |Airborne )?Division.*| \(.*/, m => /Armou?red/.test(m) ? ' Armd' : /Airborne/.test(m) ? ' Abn' : '').replace(/^(\d+)(st|nd|rd|th)\b/, '$1')), str, R.sel === F, own); R.hits.push([live[0], q[0], q[1]]); }
+       else for (const G of F.regs) { const us = G.subs.filter(u => u.active && !u.dead && (own || u.vis)); if (!us.length) continue; const x = us.reduce((a, u) => a + u.x, 0) / us.length, y = us.reduce((a, u) => a + u.y, 0) / us.length, q = R.project(x, y, .25); if (!q || q[0] < -40 || q[0] > W + 40 || q[1] < -40 || q[1] > H + 40) continue;
+         const gs = us.reduce((a, u) => a + u.size * u.str, 0) / (G.subs.reduce((a, u) => a + u.size, 0) || 1), cl = G.role === 'arty' ? 'art' : us.filter(u => u.cls === 'arm').length * 2 >= us.length ? 'arm' : G.role === 'troops' ? 'eng' : 'inf';
+-        bigCounter(q[0], q[1], 1.15, F, cl, /Brigade|Bde|CC[ABR]|Command/.test(G.n) ? 'X' : G.role === 'man' || G.role === 'arty' ? 'III' : 'II', G.n.replace(/\b(\w+)( \1)+\b/g, '$1').replace(/Infantry Brigade/, 'Bde').replace(/Armoured Brigade/, 'Armd Bde').replace(/Grenadier-Regiment/, 'GR').replace(/Panzergrenadier-Regiment/, 'PzGR').replace(/Panzer-Regiment/, 'PzR').replace(/Division Artillery|Royal Artillery|.*Artillerie-Regiment/, 'Arty').replace(/Division troops|Divisionstruppen/, 'Troops').replace(/ Infantry$/, ' Inf').slice(0, 14), gs, R.sel === F, own); R.hits.push([us[0], q[0], q[1]]); } }
++        bigCounter(q[0], q[1], 1.15, F, cl, /Brigade|Bde|CC[ABR]|Command/.test(G.n) ? 'X' : G.role === 'man' || G.role === 'arty' ? 'III' : 'II', lbl(q, G.n.replace(/\b(\w+)( \1)+\b/g, '$1').replace(/Infantry Brigade/, 'Bde').replace(/Armoured Brigade/, 'Armd Bde').replace(/Grenadier-Regiment/, 'GR').replace(/Panzergrenadier-Regiment/, 'PzGR').replace(/Panzer-Regiment/, 'PzR').replace(/Division Artillery|Royal Artillery|.*Artillerie-Regiment/, 'Arty').replace(/Division troops|Divisionstruppen/, 'Troops').replace(/ Infantry$/, ' Inf').slice(0, 14)), gs, R.sel === F, own); R.hits.push([us[0], q[0], q[1]]); } }
+     if (!lod) for (const u of S.subs) { if (!u.active || u.dead || !u.vis) continue; const v = R.visOf(u); if (!v) continue; const p = R.project(v.hx, v.hz, u.mv === 'ship' ? .5 : up); if (!p || p[0] < -30 || p[0] > W + 30 || p[1] < -30 || p[1] > H + 30) continue; counter(u, p[0], p[1], k, R.sel === u.f, mine(u.s), alpha); R.hits.push([u, p[0], p[1]]); }
+     if (R.sel && R.sel.active && (mine(R.sel.s) || R.sel.subs.some(u => u.vis && !u.dead))) { const F = R.sel, p = R.project(F.cx, F.cy, .6); if (p) text(F.n, p[0], p[1] - 16, '#111', 13, true, 'center'); }
+     for (const f of S.flights) { if (f.st === 'gone' || (!mine(f.s) && cam.dist > 70)) continue; const p = R.project3(f.x, R.hy(clamp(f.x, 0, map.w), clamp(f.y, 0, map.h)) + (f.alt || 1.5) + .25, f.y); if (p && cam.dist > 18) text(f.ac[0].split(' ')[0] + ' x' + f.n, p[0], p[1], f.s ? '#7a2a22' : '#2a4a7a', 10, true, 'center'); }
+diff --git a/engine/src/sim.js b/engine/src/sim.js
+index b59ca84..3563f3b 100644
+--- a/engine/src/sim.js
++++ b/engine/src/sim.js
+@@ -78,7 +78,7 @@ function createSim(sc, player, seed, opt) {
+     F.abn = !!abn; F.hq = mkSub(F, 'hq_' + fs.nat.toLowerCase() + (abn ? '_abn' : ''), 'HQ, ' + fs.n, 1, fs.x, fs.y); F.subs.push(F.hq);
+     F.cap = 1.5 + F.subs.reduce((a, u) => a + u.size, 0) * 1.5; F.stock = F.cap * .7;
+     S.forms.push(F);
+-    if (!F.arr) { activate(F, true); if (fs.line) { F.order = mkOrder(F, [], fs.line); F.order.st = 'done'; F.order.stretch = !!(sc.thin && sc.thin.some(r => r.test(F.n))); F.order.prog = F.order.L; const sl = lineSlots(F, F.order); for (const u of F.subs) { const p = sl.get(u); if (p) { u.x = p[0]; u.y = p[1]; u.slot = p; u.ent = fs.dug ? 1 : .4; } } F.status = 'Holding position'; } }
++    if (!F.arr) { activate(F, true); if (fs.line) { F.order = mkOrder(F, [], fs.line); F.order.st = 'done'; F.order.stretch = !!(fs.stretch || (sc.thin && sc.thin.some(r => r.test(F.n)))); F.order.prog = F.order.L; const sl = lineSlots(F, F.order); for (const u of F.subs) { const p = sl.get(u); if (p) { u.x = p[0]; u.y = p[1]; u.slot = p; u.ent = fs.dug ? 1 : .4; } } F.status = 'Holding position'; } }
+     else { { const vf = [.25, 1, 1.8][VR], rd = F.arr.mode === 'road'; F.arrT = F.arr.t * 60 * (F.arr.t > 2 ? dfS(F.s).arr : 1) + (rd ? 0 : 20) + (F.arr.t > 2 ? (rd && F.arr.t > 8 ? rnd() * 1.25 - .25 : rnd()) * (rd ? 240 : 120) * vf : 0); } F.stock = F.cap * (F.arr.mode === 'road' ? .7 : .6); F.status = 'Arrives ' + S.clock(F.arrT); }
+   });
+   if (VR) {

@@ -1,6 +1,6 @@
 # Engine fixes for france-1944, from the Sarn Corridor build
 
-Tov Binyamin Brog · 24 November 2026 (version 3: the patch now carries fixes 1 to 6 only)
+Tov Binyamin Brog · 24 November 2026 (version 4: adds fix 7, with its own patch against the current france-1944 code)
 
 Instructions for the france-1944 build. Apply the patch at the end of this document (also at https://raw.githubusercontent.com/tovbrog-pixel/sarn-corridor/main/docs/engine-fixes-for-france-1944.patch). It changes `engine/src/sim.js`, `engine/src/command.js`, `engine/src/map.js` and `engine/src/ui.js` and adds `engine/src/doctrine.js`. The Sarn Corridor build also has H-hour, pre-war intelligence and deployment variants; they are left out here because the France campaign uses historical deployments. Then make the three loader edits, set the scenario values below and test. The patch was checked against france-1944 commit 5c5182b with `git apply --check`; if the files have changed since, apply the changes by hand from the descriptions.
 
@@ -65,6 +65,16 @@ These rules also apply to the player's corps orders, since the corps and divisio
 - `tools/build-app.js`: add `'doctrine.js'` to `engineFiles` after `'replace.js'`.
 - `tools/build-preview.js`: add `'doctrine.js'` to `order` after `'replace.js'`, and `'corpsPlan'` to the `keep` list.
 
+### 7. Labels pile up, and a wide historical sector bunches into a block
+
+At regiment zoom, divisions that sit within a few kilometres of each other print their labels on top of one another. Separately, a division placed on a starting line wider than its battalions can hold forms a solid block at the centre of the line and leaves both ends empty.
+
+**Fix, in two parts:**
+- **Labels:** the overlay skips any division or regiment label that would overlap a label already drawn in the same frame. The symbol still shows. Display only; it changes no results.
+- **`stretch` on a formation:** a division given `stretch: 1` alongside its starting `line` spreads its battalions along the whole line. Without the setting nothing changes. Use it where a historical position is wider than the division's frontage, such as a German coastal division holding a long stretch of the Normandy coast. Example: `{ ..., line: [[x1, y1], [x2, y2]], stretch: 1 }`.
+
+Both parts come in a separate patch, `engine-fixes-for-france-1944-fix7.patch`, made against france-1944 commit 9d6a703, after fixes 1 to 6 went in (commit fe9e060). It changes `engine/src/render3.js` and `engine/src/sim.js`. The France regression suite matches the existing baseline with it applied, so no new baselines are needed.
+
 ## Scenario settings to try for Overlord
 
 All values are starting points for balance testing. Each is a game setting; none comes from a source. Add them to the scenario object in `tools/scenario-overlord.js`:
@@ -85,6 +95,7 @@ Add `'ownR', 'ownMax', 'isoShrinkKm', 'corpsPlan'` to the `keep` list in `tools/
 4. Run the 20-game AI-vs-AI batch on GitHub Actions and compare front lines and capture dates with the last batch.
 5. Look at the held-ground layer (key T) in the game around the Cotentin, Brest and the Falaise pocket, where coastal and inland pockets form.
 6. Watch a corps attack: divisions should leave the roads near the enemy, halt at bounds for lagging neighbours, and Third Army's armoured divisions should halt and call infantry forward when their flanks open too far.
+7. Fix 7, on a build that already has fixes 1 to 6: save the fix 7 patch at the end of this document as `fix7.patch` and run `git apply fix7.patch` (also at https://raw.githubusercontent.com/tovbrog-pixel/sarn-corridor/main/docs/engine-fixes-for-france-1944-fix7.patch). Run `node tools/regress.js`; it should match the baseline. Then check the starting positions at regiment zoom and add `stretch: 1` to any division that bunches in the middle of a historical sector.
 
 ## Patch
 
@@ -339,9 +350,50 @@ Add `'ownR', 'ownMax', 'isoShrinkKm', 'corpsPlan'` to the `keep` list in `tools/
 +
 ```
 
+## Fix 7 patch
+
+```diff
+diff --git a/engine/src/render3.js b/engine/src/render3.js
+index 2234700..c2a509a 100644
+--- a/engine/src/render3.js
++++ b/engine/src/render3.js
+@@ -166,13 +166,15 @@ function initOverlay(R, cv) {
+     // detail by zoom on division-scale scenarios (sc.divScale: [regiment zoom, division zoom] in km of camera distance): one symbol per
+     // division at theatre zoom, one per regiment, brigade or combat command at middle zoom, battalions close in
+     const DS = S.sc.divScale, lod = DS ? (cam.dist > DS[1] ? 2 : cam.dist > DS[0] ? 1 : 0) : 0; R.lod = lod;
++    // labels that would overlap a label already drawn this frame are left off (the symbol still shows)
++    const LB = [], lbl = (q, s) => { const w = s.length * 6.5 + 8; if (LB.some(b => Math.abs(b[0] - q[0]) < (b[2] + w) / 2 && Math.abs(b[1] - q[1]) < 14)) return ''; LB.push([q[0], q[1], w]); return s; };
+     if (lod) for (const F of S.forms) { if (!F.active || F.dead) continue; const live = F.subs.filter(u => u.active && !u.dead); if (!live.length) continue; const own = mine(F.s), seen = live.filter(u => u.vis); if (!own && !seen.length) continue;
+       const isDiv = F.regs && F.regs.filter(q => q.role === 'man').length >= 2, tot = F.subs.reduce((a, u) => a + u.size, 0) || 1, str = live.reduce((a, u) => a + u.size * u.str, 0) / tot, arm = live.filter(u => u.cls === 'arm').length * 3 >= live.length;
+       if (lod === 2 || !F.regs) { const q = R.project(F.cx, F.cy, .3); if (!q || q[0] < -40 || q[0] > W + 40 || q[1] < -40 || q[1] > H + 40) continue;
+-        bigCounter(q[0], q[1], 1.5, F, arm ? 'arm' : live[0].cls === 'art' ? 'art' : 'inf', isDiv ? 'XX' : live.length > 2 ? 'X' : 'II', F.n.replace(/ (Infantry |Armou?red |Airborne )?Division.*| \(.*/, m => /Armou?red/.test(m) ? ' Armd' : /Airborne/.test(m) ? ' Abn' : '').replace(/^(\d+)(st|nd|rd|th)\b/, '$1'), str, R.sel === F, own); R.hits.push([live[0], q[0], q[1]]); }
++        bigCounter(q[0], q[1], 1.5, F, arm ? 'arm' : live[0].cls === 'art' ? 'art' : 'inf', isDiv ? 'XX' : live.length > 2 ? 'X' : 'II', lbl(q, F.n.replace(/ (Infantry |Armou?red |Airborne )?Division.*| \(.*/, m => /Armou?red/.test(m) ? ' Armd' : /Airborne/.test(m) ? ' Abn' : '').replace(/^(\d+)(st|nd|rd|th)\b/, '$1')), str, R.sel === F, own); R.hits.push([live[0], q[0], q[1]]); }
+       else for (const G of F.regs) { const us = G.subs.filter(u => u.active && !u.dead && (own || u.vis)); if (!us.length) continue; const x = us.reduce((a, u) => a + u.x, 0) / us.length, y = us.reduce((a, u) => a + u.y, 0) / us.length, q = R.project(x, y, .25); if (!q || q[0] < -40 || q[0] > W + 40 || q[1] < -40 || q[1] > H + 40) continue;
+         const gs = us.reduce((a, u) => a + u.size * u.str, 0) / (G.subs.reduce((a, u) => a + u.size, 0) || 1), cl = G.role === 'arty' ? 'art' : us.filter(u => u.cls === 'arm').length * 2 >= us.length ? 'arm' : G.role === 'troops' ? 'eng' : 'inf';
+-        bigCounter(q[0], q[1], 1.15, F, cl, /Brigade|Bde|CC[ABR]|Command/.test(G.n) ? 'X' : G.role === 'man' || G.role === 'arty' ? 'III' : 'II', G.n.replace(/\b(\w+)( \1)+\b/g, '$1').replace(/Infantry Brigade/, 'Bde').replace(/Armoured Brigade/, 'Armd Bde').replace(/Grenadier-Regiment/, 'GR').replace(/Panzergrenadier-Regiment/, 'PzGR').replace(/Panzer-Regiment/, 'PzR').replace(/Division Artillery|Royal Artillery|.*Artillerie-Regiment/, 'Arty').replace(/Division troops|Divisionstruppen/, 'Troops').replace(/ Infantry$/, ' Inf').slice(0, 14), gs, R.sel === F, own); R.hits.push([us[0], q[0], q[1]]); } }
++        bigCounter(q[0], q[1], 1.15, F, cl, /Brigade|Bde|CC[ABR]|Command/.test(G.n) ? 'X' : G.role === 'man' || G.role === 'arty' ? 'III' : 'II', lbl(q, G.n.replace(/\b(\w+)( \1)+\b/g, '$1').replace(/Infantry Brigade/, 'Bde').replace(/Armoured Brigade/, 'Armd Bde').replace(/Grenadier-Regiment/, 'GR').replace(/Panzergrenadier-Regiment/, 'PzGR').replace(/Panzer-Regiment/, 'PzR').replace(/Division Artillery|Royal Artillery|.*Artillerie-Regiment/, 'Arty').replace(/Division troops|Divisionstruppen/, 'Troops').replace(/ Infantry$/, ' Inf').slice(0, 14)), gs, R.sel === F, own); R.hits.push([us[0], q[0], q[1]]); } }
+     if (!lod) for (const u of S.subs) { if (!u.active || u.dead || !u.vis) continue; const v = R.visOf(u); if (!v) continue; const p = R.project(v.hx, v.hz, u.mv === 'ship' ? .5 : up); if (!p || p[0] < -30 || p[0] > W + 30 || p[1] < -30 || p[1] > H + 30) continue; counter(u, p[0], p[1], k, R.sel === u.f, mine(u.s), alpha); R.hits.push([u, p[0], p[1]]); }
+     if (R.sel && R.sel.active && (mine(R.sel.s) || R.sel.subs.some(u => u.vis && !u.dead))) { const F = R.sel, p = R.project(F.cx, F.cy, .6); if (p) text(F.n, p[0], p[1] - 16, '#111', 13, true, 'center'); }
+     for (const f of S.flights) { if (f.st === 'gone' || (!mine(f.s) && cam.dist > 70)) continue; const p = R.project3(f.x, R.hy(clamp(f.x, 0, map.w), clamp(f.y, 0, map.h)) + (f.alt || 1.5) + .25, f.y); if (p && cam.dist > 18) text(f.ac[0].split(' ')[0] + ' x' + f.n, p[0], p[1], f.s ? '#7a2a22' : '#2a4a7a', 10, true, 'center'); }
+diff --git a/engine/src/sim.js b/engine/src/sim.js
+index b59ca84..3563f3b 100644
+--- a/engine/src/sim.js
++++ b/engine/src/sim.js
+@@ -78,7 +78,7 @@ function createSim(sc, player, seed, opt) {
+     F.abn = !!abn; F.hq = mkSub(F, 'hq_' + fs.nat.toLowerCase() + (abn ? '_abn' : ''), 'HQ, ' + fs.n, 1, fs.x, fs.y); F.subs.push(F.hq);
+     F.cap = 1.5 + F.subs.reduce((a, u) => a + u.size, 0) * 1.5; F.stock = F.cap * .7;
+     S.forms.push(F);
+-    if (!F.arr) { activate(F, true); if (fs.line) { F.order = mkOrder(F, [], fs.line); F.order.st = 'done'; F.order.stretch = !!(sc.thin && sc.thin.some(r => r.test(F.n))); F.order.prog = F.order.L; const sl = lineSlots(F, F.order); for (const u of F.subs) { const p = sl.get(u); if (p) { u.x = p[0]; u.y = p[1]; u.slot = p; u.ent = fs.dug ? 1 : .4; } } F.status = 'Holding position'; } }
++    if (!F.arr) { activate(F, true); if (fs.line) { F.order = mkOrder(F, [], fs.line); F.order.st = 'done'; F.order.stretch = !!(fs.stretch || (sc.thin && sc.thin.some(r => r.test(F.n)))); F.order.prog = F.order.L; const sl = lineSlots(F, F.order); for (const u of F.subs) { const p = sl.get(u); if (p) { u.x = p[0]; u.y = p[1]; u.slot = p; u.ent = fs.dug ? 1 : .4; } } F.status = 'Holding position'; } }
+     else { { const vf = [.25, 1, 1.8][VR], rd = F.arr.mode === 'road'; F.arrT = F.arr.t * 60 * (F.arr.t > 2 ? dfS(F.s).arr : 1) + (rd ? 0 : 20) + (F.arr.t > 2 ? (rd && F.arr.t > 8 ? rnd() * 1.25 - .25 : rnd()) * (rd ? 240 : 120) * vf : 0); } F.stock = F.cap * (F.arr.mode === 'road' ? .7 : .6); F.status = 'Arrives ' + S.clock(F.arrT); }
+   });
+   if (VR) {
+```
+
 ## Source trace
 
 - **Problems 1 to 5:** found in the Sarn Corridor build on 23 Nov 2026, from Tov's review of screenshots and from AI-vs-AI runs of the corridor scenario.
 - **Patch:** a diff of the Sarn Corridor engine files against france-1944 commit 5c5182b, plus the new `doctrine.js`, with the H-hour, intelligence and variant code removed; the France version saves stop settings under `f44_stop`. Checked with `git apply --check` on 24 Nov 2026.
 - **Doctrine sources:** [FM 100-5, 1941, ch. 8](https://ibiblio.org/hyperwar/USA/ref/FM/FM100-5/FM-100-5-8.html) (pars. 355, 364-366), [ch. 9](https://ibiblio.org/hyperwar/USA/ref/FM/FM100-5/FM-100-5-9.html) (pars. 456-457, 475), [ch. 15](https://ibiblio.org/hyperwar/USA/ref/FM/FM100-5/FM-100-5-15.html); German practice: [Lone Sentry, Basic Infantry Tactics](https://lonesentry.com/articles/intelligence-report/basic-infantry-tactics.html) and [German Infantry Tactics 1932-1945](https://www.miniatures.de/tactics-1932-german-infantry.html); Soviet division sector: [Glantz, CSI](https://webharvest.gov/peth04/20041015022815/http://www.cgsc.army.mil/carl/download/csipubs/glantz2.pdf); 1940 and 1941 corridors: [WarHistory, Sickle Cut III](https://warhistory.org/article/sickle-cut-through-france-iii), [With the Ghost Division](https://warhistory.org/de/article/with-the-ghost-division?amp=0), [Armored Forces of Barbarossa II](https://warhistory.org/article/armored-forces-of-barbarossa-ii?amp=0), [Kamenir, Smolensk](https://warfarehistorynetwork.com/article/operation-barbarossa-holding-the-line-at-smolensk/), all read 24 Nov 2026.
-- **Inference:** problem 1 almost certainly exists in france-1944, since the code is the same, but this has not been tested on the Overlord map. All setting values, including the doctrine distances (15 km development, 8 km bounds, 10 km plus 4 km per battalion of flank guard), are game settings for balance testing drawn from the doctrine above, untested on the Overlord map.
+- **Fix 7:** found on 24 Nov 2026 in Tov's review of four zoom screenshots of the Sarn Corridor deployment. The patch is a diff against france-1944 commit 9d6a703, checked with `git apply --check`, and `node tools/regress.js` matched all nine baseline scenarios with it applied.
+- **Inference:** problem 1 almost certainly exists in france-1944, since the code is the same, but this has not been tested on the Overlord map. Whether any Overlord division actually bunches at the start is untested; the German coastal divisions are named as likely cases only. All setting values, including the doctrine distances (15 km development, 8 km bounds, 10 km plus 4 km per battalion of flank guard), are game settings for balance testing drawn from the doctrine above, untested on the Overlord map.
