@@ -135,3 +135,16 @@ Applied from france-1944 (`docs/town-and-city-fighting-for-sarn-corridor.md` and
   - Losses stayed in the same range: 78 / 42, 27 / 67, 33 / 64 and 29 / 56.
 - **Bigger towns with the rules off, two seeds:** Sarnow fell in 1 of 2; losses 25 / 75 and 34 / 63. Two seeds can't separate the effect of the rules from the effect of the town size.
 - **In play (seed 202):** the corps rule fired once. II Panzer Corps gave Hradek to the 16th Motorized and sent the 4th Panzer beside it. The general's warning did not come up.
+
+## Testbed map (24 Nov 2026)
+
+- **Generator:** `tools/mapgen/testbed.py` writes `data/testbed/` (1 km engine grid and `map.json`) and a preview, `tools/mapgen/out/testbed-preview.png`. `sarnMap({ set: 'testbed' })` loads it. `node tools/testbed-check.js` places one division per side and runs 24 game hours, which took 1.9 s.
+- **Size:** 600 x 400 km, the same five nations as the continent.
+- **Ostval and the corridor:** Ostval is cut off by a Sarn corridor 35 km wide, which reaches the North Sea at Port Vesna.
+- **Neutrals:** Sarn holds the central plain. Tavia holds the Tavian Alps, crossed by one railway at Sennen Pass (hills, no mountain cells on the line), and a dry plateau with beaches near Port Aurel.
+- **Korovia:** behind the Kor, an order-4 river marked `freezes`, with marsh in front of it, forest on the Ostval border and the Kamen Range on the east edge.
+- **Seas:** the North Sea (Brennhaven, Port Vesna, Ostrand, Severomark) and the South Sea (Westerkai, Port Aurel, Yuzhny), as sea zones in `map.json`.
+- **Cities and transport:** 17 cities with production values, 18 railways and 7 roads.
+  - Korovian track is broad gauge, with gauge breaks on the Sarnow-Belov and Varnholm-Belov lines.
+  - 9 airfields, sized 1 to 3.
+- **Terrain cells:** open 182,976; light forest 5,686; heavy forest 1,065; hills 8,721; mountains 14,024; desert 3,147; beach 556; marsh 2,480; sea 20,584; river and lake 761.
