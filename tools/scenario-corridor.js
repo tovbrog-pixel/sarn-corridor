@@ -20,6 +20,10 @@ const VALDEN = [
   ['vd_inf', '7th Infantry Division', ['19th', '20th', '21st'], 'Gen. Paul Rehm', 435, 335, 'vd-xi'],
   ['vd_inf', '11th Infantry Division', ['31st', '32nd', '33rd'], 'Gen. Fritz Ostmann', 640, 168, 'vd-ost'],
   ['vd_inf', '12th Infantry Division', ['34th', '35th', '36th'], 'Gen. Hans Corell', 838, 150, 'vd-ost'],
+  ['vd_inf', '8th Infantry Division', ['22nd', '23rd', '24th'], 'Gen. Rudolf Amsel', 440, 66, 'vd-pzk'],
+  ['vd_pz', '3rd Panzer Division', ['5th', '6th', '3rd'], 'Gen. Konrad Weil', 400, 282, 'vd-xi'],
+  ['vd_inf', '6th Infantry Division', ['16th', '17th', '18th'], 'Gen. Gustav Pell', 422, 372, 'vd-xi'],
+  ['vd_inf', '10th Infantry Division', ['28th', '29th', '30th'], 'Gen. Leo Harding', 330, 150, 'vd-pzk', 24],
   ['vd_inf', '9th Infantry Division', ['25th', '26th', '27th'], 'Gen. Max Thiel', 300, 250, 'vd-xi', 48],
   ['vd_inf', '14th Infantry Division', ['40th', '41st', '42nd'], 'Gen. Erich Dorn', 300, 200, 'vd-pzk', 96],
 ];
@@ -30,22 +34,28 @@ const SARN = [
   ['sa_inf', '4th Division', ['7th', '8th', '4th'], 'Gen. Milan Sokol', 482, 288, 'sa-ii'],
   ['sa_inf', '5th Division', ['9th', '10th', '5th'], 'Gen. Viktor Hrad', 500, 350, 'sa-ii'],
   ['sa_inf', '6th (Frontier) Division', ['11th', '12th', '6th'], 'Gen. Oto Brezina', 655, 255, 'sa-ii'],
+  ['sa_inf', '7th Division', ['14th', '15th', '7th'], 'Gen. Ivo Danek', 520, 160, 'sa-i'],
+  ['sa_inf', '8th Division', ['16th', '17th', '8th'], 'Gen. Rudolf Mach', 522, 372, 'sa-ii'],
+  ['sa_inf', '9th Division', ['18th', '19th', '9th'], 'Gen. Petr Zeman', 600, 200, 'sa-i'],
   ['sa_mot', '1st Motorized Division', ['1st', '13th'], 'Gen. Karel Vlk', 650, 300, 'sa-ii'],
+  ['sa_mot', '2nd Motorized Division', ['2nd', '20th'], 'Gen. Josef Hora', 565, 250, 'sa-i'],
 ];
 const KOROV = [   // enter from the Korovian frontier at the window's east edge
   ['ko_inf', '21st Rifle Division', ['61st', '62nd', '63rd'], 'Gen. Ilya Strelin', 955, 160, 'ko-w', 120],
   ['ko_inf', '22nd Rifle Division', ['64th', '65th', '66th'], 'Gen. Fyodor Lagin', 955, 205, 'ko-w', 132],
   ['ko_tk', '1st Tank Division', ['1st', '2nd', '1st'], 'Gen. Boris Kamen', 955, 182, 'ko-w', 144],
   ['ko_inf', '23rd Rifle Division', ['67th', '68th', '69th'], 'Gen. Pyotr Orel', 955, 245, 'ko-w', 168],
+  ['ko_tk', '2nd Tank Division', ['3rd', '4th', '2nd'], 'Gen. Semyon Grach', 955, 170, 'ko-w', 192],
+  ['ko_inf', '24th Rifle Division', ['70th', '71st', '72nd'], 'Gen. Oleg Panin', 955, 225, 'ko-w', 180],
 ];
 const STYLE = { vd: { ag: .6, sk: .65, xp: 1.05 }, sa: { ag: .35, sk: .5, xp: .85 }, ko: { ag: .55, sk: .5, xp: .9 } };   // quality against mass (game settings)
 // opening objective lines for AI-run divisions, continent km (game design)
-const PLAN = {
-  '1st Panzer Division': [[520, 30], [540, 55]], '2nd Panzer Division': [[515, 140], [545, 140]], '5th Infantry Division': [[500, 85], [530, 95]],
-  '4th Panzer Division': [[540, 250], [560, 230]], '3rd Infantry Division': [[535, 320], [555, 335]], '7th Infantry Division': [[500, 355], [520, 365]],
-  '11th Infantry Division': [[565, 110], [580, 140]],
-  '21st Rifle Division': [[812, 160], [825, 182]], '22nd Rifle Division': [[810, 195], [825, 210]], '1st Tank Division': [[780, 150], [790, 175]], '23rd Rifle Division': [[760, 240], [770, 260]],
-};
+const PLAN = { '11th Infantry Division': [[565, 110], [580, 140]] };
+// corps objective lines, continent km: each corps commander splits his line among his divisions (game design)
+const CORPS_PLAN = [{ t: .5, c: 'vd-pzk', line: [[527, 17], [515, 205]] }, { t: .5, c: 'vd-xi', line: [[528, 240], [550, 345]] },   // through Port Vesna, Vesna crossing, Lisno and Corridor south; through Brodek and Tarnek
+  { t: 196, c: 'ko-w', line: [[800, 135], [815, 255]] }];
+// villages: intermediate objectives along the roads and rail lines of Sarn, 5 points each (invented names and places, game design)
+const VILLAGES = [['Lisno', 515, 175], ['Korvik', 600, 128], ['Dolna', 625, 330], ['Hradek', 590, 245], ['Velka', 760, 270], ['Brodek', 528, 280], ['Mostin', 490, 120]];
 
 function makeCorridor() {
   const base = SCENARIOS.find(s => s.id === 'falaise');
@@ -58,20 +68,22 @@ function makeCorridor() {
   VALDEN.forEach(r => mk(r, 0, 'vd'));
   for (const r of SARN) { const f = mk(r, 1, 'sa');
     if (/Motorized/.test(f.n)) continue;                                        // the mobile reserve stays free
-    const hw = 7; f.line = [[f.x, f.y - hw], [f.x, f.y + hw]]; f.dug = 1; f.stay = 1; f.stayMinStr = .45; }   // border divisions dig in facing west (game setting)
+    const hw = 10; f.line = [[f.x, f.y - hw], [f.x, f.y + hw]]; f.dug = 1; f.stay = 1; f.stayMinStr = .45; }   // border divisions dig in facing west (game setting)
   const f6 = forms.find(f => /Frontier/.test(f.n)); if (f6) f6.line = [[f6.x - 7, f6.y], [f6.x + 7, f6.y]];   // the frontier division faces north toward Ostval
   KOROV.forEach(r => mk(r, 1, 'ko'));
 
   // ---- corps (game design)
-  const corps = [['vd-pzk', 0, 'Valdenmark Panzer Corps', 'Gen. Arno Velten', .7], ['vd-xi', 0, 'Valdenmark XI Corps', 'Gen. Henrik Morr', .55], ['vd-ost', 0, 'Ostval Corps', 'Gen. Lothar Eisen', .45],
+  const corps = [['vd-army', 0, 'Valdenmark Army of the North', 'Gen. Dietrich Asch', .65, 'army'], ['ko-army', 1, 'Korovian Western Front', 'Gen. Mikhail Rudin', .6, 'army'], ['vd-pzk', 0, 'Valdenmark Panzer Corps', 'Gen. Arno Velten', .7], ['vd-xi', 0, 'Valdenmark XI Corps', 'Gen. Henrik Morr', .55], ['vd-ost', 0, 'Ostval Corps', 'Gen. Lothar Eisen', .45],
     ['sa-i', 1, 'Sarn I Corps', 'Gen. Tomas Varga', .3], ['sa-ii', 1, 'Sarn II Corps', 'Gen. Emil Kresta', .35], ['ko-w', 1, 'Korovian Western Group', 'Gen. Andrei Volkov', .6]];
-  const commands = corps.map(([id, s, n, c, ag]) => ({ id, s, level: 'corps', n, cmd: { n: c, ag, sk: .6 } }));
-  const cmdPlan = forms.map(f => ({ t: 0, f: f.n, c: f.corps }));
+  const commands = corps.map(([id, s, n, c, ag, lv]) => ({ id, s, level: lv || 'corps', n, cmd: { n: c, ag, sk: .6 } }));
+  const cmdPlan = forms.map(f => ({ t: 0, f: f.n, c: f.corps })).concat(['vd-pzk', 'vd-xi', 'vd-ost'].map(c => ({ t: 0, f: 'cmd:' + c, c: 'vd-army' })), [{ t: 0, f: 'cmd:ko-w', c: 'ko-army' }]);
+  const corpsPlan = CORPS_PLAN.map(q => ({ t: q.t, c: q.c, line: q.line.map(p => W(p[0], p[1])) }));
 
   // ---- objectives [name, x, y, points, owner at start]
   const vp = [['Port Vesna', 30, 1], ['Tarnek', 20, 1], ['Sarnow', 25, 1], ['Ostrand', 25, 0], ['Varnholm', 15, 0], ['Freyburg', 15, 0], ['Saarholt', 10, 0], ['Halden', 30, 0], ['Brennhaven', 10, 0]]
     .map(([n, pts, own]) => { const p = C(n); return [n, p[0], p[1], pts, own]; });
   for (const [n, x, y, pts] of [['Vesna crossing', 515, 95, 10], ['Corridor south', 520, 205, 10]]) { const p = W(x, y); vp.push([n, p[0], p[1], pts, 1]); }   // the corridor itself (game design)
+  for (const [n, x, y] of VILLAGES) { const p = W(x, y); vp.push([n, p[0], p[1], 5, 1]); m.towns.push([n, p[0], p[1], 1]); }
 
   // ---- supply: depots and ports, stocks and rates are game settings
   const src = (n, at, stock, rate, t) => { const p = typeof at === 'string' ? C(at) : W(at[0], at[1]); return Object.assign({ n, x: p[0], y: p[1], stock, rate }, t ? { t } : {}); };
@@ -96,7 +108,7 @@ function makeCorridor() {
     assets: [], sources: s ? sSrc : vSrc, pool: [], bases: s ? sBases : vBases, transport: { aircraft: 0 }, groups: s ? sGroups : vGroups }));
 
   return Object.assign({}, base, m, { id: 'corridor', title: 'Corridor Crisis', sub: 'Valdenmark against Sarn, 1 to 21 June', start: START, hours: hrs(DAYS),
-    ownCell: 1, aiExact: 1, labels: ['Valdenmark', 'Sarn'], divScale: [22, 70], commands, cmdPlan, detourKm: 30, view: { x: 330, y: 150, dist: 150, pitch: 1.3 }, playerSides: [0, 1, -1],
+    ownCell: 1, ownR: 5, ownMax: 25, aiExact: 1, labels: ['Valdenmark', 'Sarn'], divScale: [22, 70], commands, cmdPlan, corpsPlan, armyAI: { only: ['vd-army', 'ko-army'], from: 30, frontKm: 5, reachKm: 70, cadenceH: 18, waitH: 30, supply: .3 }, detourKm: 30, view: { x: 330, y: 150, dist: 150, pitch: 1.3 }, playerSides: [0, 1, -1],
     modules: ['transport', 'air', 'command', 'repl'],
     repl: { pools: [{ k: 'vd', n: 'Valdenmark depots', s: 0, nat: ['GE'], perDay: [{ from: 0, n: 1.2 }], xp: .85 },
       { k: 'sa', n: 'Sarn reserves', s: 1, nat: ['IT'], perDay: [{ from: 0, n: .5 }], xp: .75 },

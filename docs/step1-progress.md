@@ -25,3 +25,16 @@ Valdenmark took Tarnek on day 2, Port Vesna on day 8 and the southern corridor o
 - National will, neutral alignment and the Korovian entry decision are not built; Korovia enters on a fixed schedule.
 - Air groups use stand-in aircraft types; the 4th field of each group follows the engine's existing format.
 - The Windows build runs only by hand (workflow_dispatch), once fixes and tests are finished.
+
+## Fixes after Tov's first look, 23 Nov 2026
+
+- **Pockets now contract.** The pocket rule flooded through sea cells, so every coastal pocket joined the rest of its side's ground across the water and never closed. Sea cells now belong to no pocket (`engine/src/sim.js`, `ownTick`). The France engine has the same rule and likely the same fault.
+- **Front-line ground model.** Each hour every land cell within `ownMax` km of formed troops goes to the side whose troops are nearer, measured over land (`frontTick`). The line between armies lies halfway between them, ground behind an advance changes hands, and bypassed divisions end up in pockets. The corridor sets `ownMax: 25` and a 5 km hold radius (`ownR`). Game settings.
+- **Corps orders and an AI army.** Opening orders now go to corps (`sc.corpsPlan`), whose commanders split one objective line among their divisions; from hour 30 the Army of the North and the Korovian Western Front give their corps objectives in turn (`armyAI`, frontage set by `frontKm`).
+- **More divisions:** 14 Valdenmark, 11 Sarn, 6 Korovian; seven villages as 5-point objectives along Sarn's roads and rail.
+- **Supply convoys** already could not route across enemy-held ground; the convoy in the screenshot drove on ground Sarn still held between two Valdenmark advances. The front-line model removes those gaps.
+- **Reports no longer pause the clock or move the camera** by default. The Stop-the-clock settings box can turn either back on, saved per game (`sc_stop`).
+
+## Open: the Valdenmark AI bypasses strongpoints
+
+In a 14-day run Valdenmark took only the Vesna crossing. Its divisions pass between Sarn's dug-in divisions, which keep Port Vesna and the corridor towns from inside their pockets. Next: AI corps that reduce bypassed pockets, and cut-off divisions that weaken and surrender as the design document sets out.
