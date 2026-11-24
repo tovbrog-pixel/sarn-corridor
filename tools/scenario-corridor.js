@@ -106,7 +106,7 @@ function makeCorridor() {
   const vp = [['Port Vesna', 30, 1], ['Tarnek', 20, 1], ['Sarnow', 25, 1], ['Ostrand', 25, 0], ['Varnholm', 15, 0], ['Freyburg', 15, 0], ['Saarholt', 10, 0], ['Halden', 30, 0], ['Brennhaven', 10, 0]]
     .map(([n, pts, own]) => { const p = C(n); return [n, p[0], p[1], pts, own]; });
   for (const [n, x, y, pts] of [['Vesna crossing', 515, 95, 10], ['Corridor south', 520, 205, 10]]) { const p = W(x, y); vp.push([n, p[0], p[1], pts, 1]); }
-  for (const [n, x, y] of [['Lisno', 515, 175], ['Korvik', 600, 128], ['Dolna', 625, 330], ['Hradek', 590, 245], ['Velka', 760, 270], ['Brodek', 528, 280], ['Mostin', 490, 120]]) { const p = W(x, y); vp.push([n, p[0], p[1], 5, 1]); m.towns.push([n, p[0], p[1], 1]); }
+  for (const [n, x, y] of [['Lisno', 515, 175], ['Korvik', 600, 128], ['Dolna', 625, 330], ['Hradek', 590, 245], ['Velka', 760, 270], ['Brodek', 528, 280], ['Mostin', 490, 120]]) { const p = W(x, y); vp.push([n, p[0], p[1], 5, 1]); m.towns.push([n, p[0], p[1], 1, 1.0]); }   // villages drawn like other size-1 towns, about 2 km across
   // ---- supply, ports, air (game settings; aircraft types are stand-ins)
   const src = (n, at, stock, rate, t) => { const p = typeof at === 'string' ? C(at) : W(at[0], at[1]); return Object.assign({ n, x: p[0], y: p[1], stock, rate }, t ? { t } : {}); };
   const vSrc = [src('Halden depots', 'Halden', 120, 4), src('Freyburg railhead', 'Freyburg', 90, 4), src('Saarholt railhead', 'Saarholt', 60, 3), src('Brennhaven port', 'Brennhaven', 40, 2), src('Ostrand port (Ostval)', 'Ostrand', 40, 2), src('Varnholm depot', 'Varnholm', 20, 1)];
@@ -129,7 +129,7 @@ function makeCorridor() {
     forms: v0.forms, commands: v0.commands, cmdPlan: v0.cmdPlan, corpsPlan: v0.corpsPlan, variants,
     armyAI: { only: ['vd-army', 'ko-army'], from: HHOUR + 30, frontKm: 5, reachKm: 70, cadenceH: 18, waitH: 30, supply: .3, pocketBonus: 2.5 },
     detourKm: 30, view: { x: 330, y: 190, dist: 230, pitch: 1.3 }, playerSides: [0, 1, -1],
-    modules: ['transport', 'air', 'command', 'repl', 'doctrine', 'intel', 'urban'],
+    modules: ['transport', 'air', 'command', 'repl', 'doctrine', 'intel'].concat(process.env.SC_NOURBAN ? [] : ['urban']),
     intel: { known: [.8, .6], rearMul: .55, errKm: [4, 14], named: [.6, .4], frontKm: 30 },
     repl: { pools: [{ k: 'vd', n: 'Valdenmark depots', s: 0, nat: ['GE'], perDay: [{ from: HHOUR, n: 2.5 }], xp: .85 },
       { k: 'sa', n: 'Sarn reserves', s: 1, nat: ['IT'], perDay: [{ from: HHOUR, n: 1 }], xp: .75 },

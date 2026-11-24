@@ -21,6 +21,8 @@ function clipLine(pts, x0, y0, w, h) {
 }
 // a road beside each railway, about 1 km off the track: main roads follow the rail corridors (game setting, inference)
 function besideRail(pts) { return pts.map((p, i) => { const a = pts[Math.max(0, i - 1)], b = pts[Math.min(pts.length - 1, i + 1)], dx = b[0] - a[0], dy = b[1] - a[1], L = Math.hypot(dx, dy) || 1; return [p[0] - dy / L * .9, p[1] + dx / L * .9]; }); }
+// built-up radius by town size (km), Sarn Corridor's own: capitals about 6 km across, size-2 cities about 3.5 km, size-1 towns about 2 km (game settings, Tov 24 Nov 2026)
+const TOWN_R = { 1: 1.0, 2: 1.75, 3: 3.0 };
 function sarnMap(o) {
   const g = load(), GW = g.grid.w, GH = g.grid.h, M = g.map;
   const x0 = o.x0 || 0, y0 = o.y0 || 0, w = o.w || GW - x0, h = o.h || GH - y0, cs = o.cs || 1;
@@ -37,7 +39,7 @@ function sarnMap(o) {
     for (let i = 1; i < r.pts.length; i++) { const a = r.pts[i - 1], b = r.pts[i], L = Math.hypot(b[0] - a[0], b[1] - a[1]); acc += L;
       if (acc >= 20) { acc = 0; const nx = -(b[1] - a[1]) / (L || 1), ny = (b[0] - a[0]) / (L || 1);
         for (const p of clipLine([[b[0] - nx * 4, b[1] - ny * 4], [b[0] + nx * 4, b[1] + ny * 4]], x0, y0, w, h)) out.roads.push([2, p]); } } }
-  for (const c of M.cities) if (c.x >= x0 && c.x <= x0 + w && c.y >= y0 && c.y <= y0 + h) out.towns.push([c.name, +(c.x - x0).toFixed(2), +(c.y - y0).toFixed(2), c.kind === 'capital' ? 3 : c.size]);
+  for (const c of M.cities) if (c.x >= x0 && c.x <= x0 + w && c.y >= y0 && c.y <= y0 + h) out.towns.push([c.name, +(c.x - x0).toFixed(2), +(c.y - y0).toFixed(2), c.kind === 'capital' ? 3 : c.size, TOWN_R[c.kind === 'capital' ? 3 : c.size]]);
   return out;
 }
 sarnMap.load = load;

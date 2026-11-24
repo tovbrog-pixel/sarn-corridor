@@ -118,3 +118,20 @@ Applied from france-1944 (`docs/town-and-city-fighting-for-sarn-corridor.md` and
   - With `reserve: false`: 3rd Infantry takes the town's stretch and the panzer division keeps 1.5 km beside it.
 - **The general's warning** appeared when the 1st Panzer was ordered into Sarnow alone.
 - **Four seeds, 288 h, with the rules against without:** seeds 101 and 202 identical; 303 and 404 differ by one or two loss points; capture dates unchanged. The rules hardly fire, because the towns are small on this map: a size-2 town is drawn with a 0.95 km radius, a size-1 town 0.4 km.
+
+## Bigger towns (24 Nov 2026, Tov's decision)
+
+- **Sizes:** the Sarn map draws built-up areas with radii by size: capitals 3.0 km (about 6 km across), size-2 cities 1.75 km and size-1 towns 1.0 km. The radii are in `TOWN_R` in `tools/sarnmap.js`; the corridor villages get 1.0 km too.
+- **Engine change:** towns take an optional radius as their fifth field, so France 1944 and the old scenarios are unchanged (`node tools/regress.js` matches).
+- **Built-up cells:**
+  - Sarnow 32 and Halden 32.
+  - Port Vesna 14, Freyburg 12 and Brennhaven 11.
+  - Ostrand 5.
+  - Tarnek, Varnholm, Saarholt and the villages 4 each.
+  - Lisno has none, since its point lies off built-up ground.
+- **Four seeds, 288 h, bigger towns with the rules on:**
+  - Sarnow fell in 2 of 4 battles (10 Jun twice), where it fell in all 4 with the small towns.
+  - Seed 101 took neither Corridor south nor Sarnow.
+  - Losses stayed in the same range: 78 / 42, 27 / 67, 33 / 64 and 29 / 56.
+- **Bigger towns with the rules off, two seeds:** Sarnow fell in 1 of 2; losses 25 / 75 and 34 / 63. Two seeds can't separate the effect of the rules from the effect of the town size.
+- **In play (seed 202):** the corps rule fired once. II Panzer Corps gave Hradek to the 16th Motorized and sent the 4th Panzer beside it. The general's warning did not come up.

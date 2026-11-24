@@ -75,7 +75,7 @@ function buildMap(sc) {
   for (const r of sc.rivers || []) { const pts = line(r[2]); m.riverLines.push({ name: r[0], cls: r[1], pts }); raster(pts, c => { if (m.t[c] === T.SEA) return; if (r[1] === 1) { m.riv[c] = 1; m.t[c] = T.RIVER; } else if (m.riv[c] !== 1) { m.riv[c] = 2; m.t[c] = T.STREAM; } }); }
   for (const t of sc.towns || []) {
     const tw = { name: t[0], x: t[1], y: t[2], size: t[3], fire: 0 }; m.towns.push(tw);
-    const r = t[3] >= 3 ? 1.7 : t[3] === 2 ? .95 : .4;
+    const r = t[4] || (t[3] >= 3 ? 1.7 : t[3] === 2 ? .95 : .4);   // t[4]: radius of the built-up area in km, when the scenario sets one
     for (let j = Math.floor((t[2] - r) / cs); j <= Math.floor((t[2] + r) / cs); j++) for (let i = Math.floor((t[1] - r) / cs); i <= Math.floor((t[1] + r) / cs); i++) {
       if (i < 0 || j < 0 || i >= W || j >= H) continue; const c = j * W + i; if (m.t[c] === T.SEA || m.t[c] === T.RIVER) continue;
       const d = Math.hypot((i + .5) * cs - t[1], (j + .5) * cs - t[2]); if (d <= r + cs * .3) m.t[c] = (t[3] >= 3 && d < r * .7) ? T.CITY : T.TOWN;
