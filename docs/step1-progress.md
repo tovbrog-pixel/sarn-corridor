@@ -74,3 +74,15 @@ Tov asked for divisions and corps to advance as a line, over open ground near th
 - The camera has no zoom-out limit (R.maxDist about 1,300 km). R.jump only zooms in; use R.glideTo or R.fitAll for the theatre view.
 - Sarn's thin-sector regex now reaches the browser build as source strings.
 - Check run, variant 0, seed 101, 168 h: Valdenmark took Tarnek on 5 Jun (day 4 of the war) and the Vesna crossing on 6 Jun. Losses V 26, S 29.
+
+## Regiment-level test (24 Nov 2026)
+
+- **Engine:** a unit can stand for several battalions. Sub spec `kind|name|mul|bns`: `mul` sets fire and toughness as before, `bns` sets frontage in line slots, the army AI's frontage weight, the doctrine flank-guard count and column length. Combat distance is measured from the unit's edge, (bns - 1) x 0.75 km to each side. Units with no `bns` behave as before; `node tools/regress.js` matches the baseline.
+- **Templates:** `vd_inf_r`, `vd_pz_r`, `vd_mot_r`, `sa_inf_r`, `sa_mot_r`, `ko_inf_r`, `ko_tk_r`: one unit per regiment or brigade, one artillery unit per division, division troops unchanged. `SC_LEVEL=reg` builds Corridor Crisis from them. Differences from the battalion templates: the 2nd panzer regiment is all Pz III type, and artillery merges its medium battalion into the field type.
+- **Supply speed-up:** supply read the owner of every map cell through a function call, four times per 10-minute tick; it now reads a cached index. Same results; about half the run time.
+- **Run, seed 101, variant 0, 288 h, both levels at once on 2 cores:**
+  - Units: 948 battalion-level, 480 regiment-level.
+  - Time to 4 Jun 0400: battalion 176 s before the supply fix, 94 s after; regiment 70 s after.
+  - Captures (battalion / regiment): Vesna crossing 6 Jun / 4 Jun; Corridor south 7 Jun / 6 Jun; Sarnow 11 Jun / 9 Jun; Port Vesna by neither.
+  - Losses at 12 Jun (V / S): battalion 70 / 44; regiment 33 / 74.
+- **Profile after the fix (regiment level):** ownership tick 22%, path finding 20%, step 13%, supply flood 12%, combat 5%. Map-wide work costs more than unit count.

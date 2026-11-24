@@ -20,7 +20,7 @@ function attachDoctrine(S) {
   // a mobile division: most of its leading battalions ride in vehicles (armour, mechanised, or motorised infantry and reconnaissance)
   const mobile = F => { const L = F.subs.filter(u => fighting(u) && LEADCLS[u.cls]); return L.length && L.filter(u => u.cls === 'arm' || u.cls === 'mech' || u.mv !== 'foot').length / L.length > .6; };
   S.isMobile = mobile;
-  const guardBns = F => F.subs.filter(u => fighting(u) && (u.cls === 'inf' || u.cls === 'mech' || u.cls === 'rec')).length;
+  const guardBns = F => F.subs.filter(u => fighting(u) && (u.cls === 'inf' || u.cls === 'mech' || u.cls === 'rec')).reduce((a, u) => a + BW(u), 0);
 
   // 1. development: hourly flag per formation
   function devTick() {

@@ -4,6 +4,10 @@ function polyLen(p) { let l = 0; for (let i = 1; i < p.length; i++) l += Math.hy
 function polyAt(p, s) { if (p.length === 1) return { x: p[0][0], y: p[0][1], dx: 1, dy: 0 }; s = Math.max(0, s); for (let i = 1; i < p.length; i++) { const dx = p[i][0] - p[i - 1][0], dy = p[i][1] - p[i - 1][1], l = Math.hypot(dx, dy) || 1e-6; if (s <= l || i === p.length - 1) { const t = Math.min(1, s / l); return { x: p[i - 1][0] + dx * t, y: p[i - 1][1] + dy * t, dx: dx / l, dy: dy / l }; } s -= l; } }
 function polyProj(p, x, y) { let best = 0, bd = 1e9, acc = 0; for (let i = 1; i < p.length; i++) { const ax = p[i - 1][0], ay = p[i - 1][1], dx = p[i][0] - ax, dy = p[i][1] - ay, l2 = dx * dx + dy * dy || 1e-9; const t = clamp(((x - ax) * dx + (y - ay) * dy) / l2, 0, 1), d = Math.hypot(x - ax - dx * t, y - ay - dy * t), l = Math.sqrt(l2); if (d < bd) { bd = d; best = acc + t * l; } acc += l; } return best; }
 const LEADCLS = { inf: 1, arm: 1, mech: 1, rec: 1, cdo: 1 };
+// battalion weight of a unit: a regiment or brigade simulated as one unit (sub spec 'kind|name|mul|bns', bns > 1) counts as bns battalions
+// for frontage, guard and column counts. Size (fire and toughness) still comes from mul.
+const BW = u => u.bns || 1;
+const EXT_KM = .75;   // half a battalion frontage: a unit of bns battalions reaches (bns - 1) x 0.75 km further to each side
 // ammunition used per minute of firing, resupply per ten-minute tick, and the attrition scale (tuned after first playtest)
 // national command doctrine, simplified (see help card). delay: staff time for orders; init: chance a commander acts on his own; mass: bonus per extra battery on one target (fire direction centres); crad: command-radius multiplier (radios)
 // how hard an attack presses: need scales the odds the commander wants; coh is the formation cohesion below which he halts; ret shifts the cohesion at which battalions fall back
@@ -63,10 +67,11 @@ function createSim(sc, player, seed, opt) {
   S.assets = [[], []]; S.xings = [];
   { let d = 0; for (let c = 0; c < map.N; c++) if (map.t[c] === T.DESERT) d++; S.desert = d > map.N * .3; }   // desert maps double the water and ration draw
   sc.sides.forEach((sd, s) => { for (const a of sd.assets || []) { const q = S.src[s].find(q => !q.air && (!a.at || q.n === a.at)) || S.src[s].find(q => !q.air) || S.src[s][0]; S.assets[s].push({ id: S.assets[s].length, s, k: a.k, n: a.n, n0: a.n, nm: a.nm, x: q ? q.x : 0, y: q ? q.y : 0, t: a.t || 0, st: 'park', site: null, haul: null }); } });
-  function mkSub(F, key, name, mul, x, y) {
+  function mkSub(F, key, name, mul, x, y, bns) {
     const k = KIND[key]; if (!k) throw new Error('unknown kind ' + key);
-    const u = { id: S.nid++, f: F, s: F.s, k, n: name || k.n, cls: k.cls, mv: k.mv, mvi: MVI[k.mv], size: k.size * (mul || 1), mul: mul || 1, x, y, hx: F.s ? -1 : 1, hy: 0, str: 1, coh: 1, ammo: 1, fuel: 1, ent: 0, goal: null, slot: null, path: null, pi: 0, needPath: false, pathT: -99, noPath: false, moving: false, tgt: null, fireT: -99, hitT: -99, seenT: -99, active: false, dead: false, state: 'ok', assault: false, ned: 9, ne: null, dS: 0, dC: 0, xp: F.xp, trail: [] };
+    const u = { id: S.nid++, f: F, s: F.s, k, n: name || k.n, cls: k.cls, mv: k.mv, mvi: MVI[k.mv], size: k.size * (mul || 1), mul: mul || 1, bns: bns > 1 ? bns : 1, x, y, hx: F.s ? -1 : 1, hy: 0, str: 1, coh: 1, ammo: 1, fuel: 1, ent: 0, goal: null, slot: null, path: null, pi: 0, needPath: false, pathT: -99, noPath: false, moving: false, tgt: null, fireT: -99, hitT: -99, seenT: -99, active: false, dead: false, state: 'ok', assault: false, ned: 9, ne: null, dS: 0, dC: 0, xp: F.xp, trail: [] };
     u.mor0 = clamp(.62 + .45 * ((F.xp || 1) - 1) + (/para|glider|ranger|cdo|fj/.test(key) || /Guards|SS|Fallschirm|Parachute|Commando|Ranger|Hermann Goering|Lehr/.test(F.n) ? .12 : 0) - (/Costier|Coastal|Kuest|Bodenst|stragglers/.test(name || '') || /Costier|Coastal/.test(F.n) ? .15 : 0), .3, .95); u.mor = u.mor0; u.inC = 0; u.broken = false; u.aaRole = !!k.aa;
+    u.ext = u.bns > 1 && k.cls !== 'art' && k.cls !== 'hq' ? (u.bns - 1) * EXT_KM : 0;
     S.subs.push(u); return u;
   }
   function spread(F, x, y, r) {
@@ -74,7 +79,7 @@ function createSim(sc, player, seed, opt) {
   }
   sc.forms.forEach((fs, fi) => {
     const F = { id: fi, s: fs.s, nat: fs.nat, n: fs.n, cmd: { n: fs.cmd, ag: clamp(fs.ag + (rnd() - .5) * (.08 + .08 * VR), .2, .98), sk: clamp(fs.sk + (rnd() - .5) * (.08 + .08 * VR), .3, .98), why: fs.why || '' }, xp: (fs.xp || 1) * dfS(fs.s).xp, subs: [], hq: null, order: null, stock: 0, cap: 0, active: false, dead: false, arr: fs.arr || null, ai: fs.ai ? fs.ai.map(a => ({ t: sc.aiExact ? a.t + rnd() * 3 : a.t > 2 ? a.t * (.92 + rnd() * .22) * plan[fs.s].tm * dfS(fs.s).arr : a.t, path: a.path, line: a.line, then: a.then, cond: a.cond })) : null, aiI: 0, res: !!fs.res, hold: !!fs.hold, stay: !!fs.stay, stayUntil: fs.stayUntil || 0, stayMinStr: fs.stayMinStr || 0, rearPt: fs.rear || null, freeT: (fs.free != null ? fs.free : (sc.sides[fs.s].free || 0)) * 60, x: fs.x, y: fs.y, cx: fs.x, cy: fs.y, halt: false, assaultT: 0, evalT: 0, msgT: 0, casCd: 0, airMsgT: 0, convT: 0, convoy: null, isolated: false, isoMsgT: 0, paraT: 0, status: '', nextT: fi * .37, bridge: null, needEng: false, dis: 0, jamT: 0, jamMsgT: 0, haltT: 0, rerouteT: 0, fired: 0, fallT: 0, idleT: 0, led: {}, ledN: {}, att: null };
-    for (const sp of fs.sub) { const a = sp.split('|'); F.subs.push(mkSub(F, a[0], a[1], a[2] ? +a[2] : 1, fs.x, fs.y)); }
+    for (const sp of fs.sub) { const a = sp.split('|'); F.subs.push(mkSub(F, a[0], a[1], a[2] ? +a[2] : 1, fs.x, fs.y, a[3] ? +a[3] : 1)); }
     // regiments, brigades and combat commands: groups of the division's battalions (France 1944 scenarios only)
     if (fs.regs) { F.regs = fs.regs.map(r => ({ n: r.n, role: r.role || 'man', subs: r.idx.map(i => F.subs[i]).filter(Boolean) })); for (const R of F.regs) for (const u of R.subs) u.reg = R; }
     const abn = ((fs.arr && fs.arr.mode === 'air') || /Parachute|Glider|Airlanding|Fallschirm|FJR/.test(fs.n)) && KIND['hq_' + fs.nat.toLowerCase() + '_abn'];
@@ -293,12 +298,12 @@ function createSim(sc, player, seed, opt) {
       const up = byPos.filter(R => R !== F.resReg); rank = new Map(); up.forEach((R, i) => rank.set(R, i));
       for (const u of L) if (!u.reg || !rank.has(u.reg)) { if (res.indexOf(u) >= 0) continue; let bi = 0, bd = 1e9; up.forEach((R, i) => { const d = Math.abs(pos(R) - (u.x * lx + u.y * ly)); if (d < bd) { bd = d; bi = i; } }); u.rgRank = bi; } else u.rgRank = rank.get(u.reg);
     } else if (L.length >= 4) { const pick = L.filter(u => u.cls === 'arm')[0] || L[L.length - 1]; res = [pick]; if (L.length >= 7) { const p2 = L.filter(u => u !== pick && u.cls !== 'rec')[0]; if (p2) res.push(p2); } }
-    const lead = L.filter(u => res.indexOf(u) < 0), fw = frontLine(O.line, sa, sb), W = lead.length * fw;
+    const lead = L.filter(u => res.indexOf(u) < 0), fw = frontLine(O.line, sa, sb), tw = lead.reduce((a, u) => a + BW(u), 0), W = tw * fw;
     // a line longer than the battalions can hold becomes a solid sector at its centre, unless the order says to stretch along all of it
     const held = !O.stretch && le > W * 1.1 ? W : le, s0 = sa + (le - held) / 2; O.held = [held, ll]; O.bank = le < ll - .5 ? le : 0;
     if (rank) lead.sort((u, v) => (u.rgRank - v.rgRank) || along(u, v)); else lead.sort(along); AT.sort(along);
-    const n = Math.max(1, lead.length), half = Math.min(fw, held / n) / 2;
-    lead.forEach((u, i) => { const p = polyAt(O.line, s0 + held * (i + .5) / n); out.set(u, map.snap(u.mvi, p.x, p.y, Math.min(2, half * .6) / map.cs, true) || [p.x, p.y]); u.sec = { dx: p.dx, dy: p.dy, h: half }; u.face = faceOf(p, r); });
+    const n = Math.max(1, tw); let cum = 0;
+    lead.forEach(u => { const w = BW(u), half = Math.min(fw, held / n) * w / 2, p = polyAt(O.line, s0 + held * (cum + w / 2) / n); cum += w; out.set(u, map.snap(u.mvi, p.x, p.y, Math.min(2, half * .6) / map.cs, true) || [p.x, p.y]); u.sec = { dx: p.dx, dy: p.dy, h: half }; u.face = faceOf(p, r); });
     // anti-tank guns stand at the seams between battalions, a little behind the line
     AT.forEach((u, j) => { const p = polyAt(O.line, s0 + held * ((j % Math.max(1, n - 1)) + 1) / n), x = p.x + r[0] * .3, y = p.y + r[1] * .3; out.set(u, map.snap(u.mvi, x, y, 2, true) || [x, y]); u.sec = null; u.face = faceOf(p, r); });
     const put = (u, d, lat) => { const x = mid.x + r[0] * d - r[1] * lat, y = mid.y + r[1] * d + r[0] * lat; const p = map.snap(u.mvi, x, y, 4, u.cls !== 'art'); if (p) out.set(u, p); };
@@ -562,7 +567,7 @@ function createSim(sc, player, seed, opt) {
       const cs = ci.subarray(0, nc); if (nc > 1) cs.sort();
       for (let k = 0; k < nc; k++) {
       const b = B[cs[k]], dx = a.x - b.x, dy = a.y - b.y; if (dx * dx + dy * dy > 961.001) continue;
-      const d = Math.hypot(dx, dy); if (d > 31) continue;
+      const d0 = Math.hypot(dx, dy); if (d0 > 31) continue; const d = a.ext || b.ext ? Math.max(.05, d0 - a.ext - b.ext) : d0;
       if (d < 4.5 * 1.6) {
         const sa = 3 * nv * (a.cls === 'rec' ? 1.5 : 1) * (a.tc === T.HILL || a.tc === T.MTN ? 1.3 : 1) * CONCEAL[b.tc] * (b.moving ? 1.25 : .9) * (b.k.arm > 0 || b.mv !== 'foot' ? 1.15 : 1) * (now - b.fireT < 3 && !b.k.ir ? 1.5 : 1);
         if (d < Math.max(.5, sa)) b.seenT = now;
@@ -673,13 +678,13 @@ function createSim(sc, player, seed, opt) {
   }
   function supplyTick() {
     moraleTick(); dropTick();
-    for (let s = 0; s < 2; s++) { const z = S.zoc[s]; z.fill(0); for (let j = 0; j < map.H; j++) for (let i = 0; i < map.W; i++) if (S.ownAt((i + .5) * map.cs, (j + .5) * map.cs) !== s) z[j * map.W + i] = 1; const r = Math.ceil(1.2 / map.cs); for (const e of S.subs) if (e.s !== s && e.active && !e.dead && e.cls !== 'hq' && e.cls !== 'art' && e.coh > .2) { const ci = Math.floor(e.x / map.cs), cj = Math.floor(e.y / map.cs); for (let dj = -r; dj <= r; dj++) for (let di = -r; di <= r; di++) { const i = ci + di, j = cj + dj; if (i >= 0 && j >= 0 && i < map.W && j < map.H && di * di + dj * dj <= r * r) z[j * map.W + i] = 1; } } }
+    const M = m2o(), OA = OW.a; for (let s = 0; s < 2; s++) { const z = S.zoc[s]; z.fill(0); for (let c = 0; c < map.N; c++) if (OA[M[c]] !== s) z[c] = 1; const r = Math.ceil(1.2 / map.cs); for (const e of S.subs) if (e.s !== s && e.active && !e.dead && e.cls !== 'hq' && e.cls !== 'art' && e.coh > .2) { const ci = Math.floor(e.x / map.cs), cj = Math.floor(e.y / map.cs); for (let dj = -r; dj <= r; dj++) for (let di = -r; di <= r; di++) { const i = ci + di, j = cj + dj; if (i >= 0 && j >= 0 && i < map.W && j < map.H && di * di + dj * dj <= r * r) z[j * map.W + i] = 1; } } }
     // battalion-level supply: the ground each side can reach, avoiding the enemy's immediate reach (1.2 km round his troops) and water with no bridge.
     // A battalion draws supply only if the ground round it (1.2 km) joins the ground round its headquarters.
     for (let s = 0; s < 2; s++) { const zE = S.zE[s], lab = S.lab[s]; zE.fill(0); lab.fill(0); const r = Math.ceil(1.2 / map.cs);
       for (const e of S.subs) if (e.s !== s && e.active && !e.dead && e.cls !== 'hq' && e.cls !== 'art' && e.coh > .2 && e.mv !== 'ship') { const ci = Math.floor(e.x / map.cs), cj = Math.floor(e.y / map.cs); for (let dj = -r; dj <= r; dj++) for (let di = -r; di <= r; di++) { const i = ci + di, j = cj + dj; if (i >= 0 && j >= 0 && i < map.W && j < map.H && di * di + dj * dj <= r * r) zE[j * map.W + i] = 1; } }
       // ground the enemy owns blocks the link too, as it does for supply columns
-      for (let c = 0; c < map.N; c++) if (!zE[c] && S.ownAt((c % map.W + .5) * map.cs, (((c / map.W) | 0) + .5) * map.cs) === 1 - s) zE[c] = 1;
+      for (let c = 0; c < map.N; c++) if (!zE[c] && OA[M[c]] === 1 - s) zE[c] = 1;
       let n = 0; const st = []; for (let c = 0; c < map.N; c++) { if (lab[c] || zE[c] || map.fac[0][c] <= 0) continue; n++; lab[c] = n; st.push(c); while (st.length) { const q = st.pop(), i = q % map.W, j = (q / map.W) | 0; if (i > 0) vis(q - 1); if (i < map.W - 1) vis(q + 1); if (j > 0) vis(q - map.W); if (j < map.H - 1) vis(q + map.W); } }
       function vis(c) { if (!lab[c] && !zE[c] && map.fac[0][c] > 0) { lab[c] = n; st.push(c); } } }
     const near = (s, x, y) => { const out = new Set(), lab = S.lab[s], r = Math.ceil(1.2 / map.cs), ci = Math.floor(x / map.cs), cj = Math.floor(y / map.cs); for (let dj = -r; dj <= r; dj++) for (let di = -r; di <= r; di++) { const i = ci + di, j = cj + dj; if (i >= 0 && j >= 0 && i < map.W && j < map.H && di * di + dj * dj <= r * r && lab[j * map.W + i]) out.add(lab[j * map.W + i]); } return out; };
@@ -1221,6 +1226,8 @@ function createSim(sc, player, seed, opt) {
   // Objectives: whoever takes an objective takes the ground within 1 km of it.
   // Consolidation (every hour): ground no one stands on goes to the side holding most of the ground around it, so bypassed pockets and salients fill in.
   const OW = (() => { const cw = sc.ownCell || .5, gw = Math.ceil(map.w / cw), gh = Math.ceil(map.h / cw); return { cw, gw, gh, a: new Uint8Array(gw * gh), pres: [new Uint8Array(gw * gh), new Uint8Array(gw * gh)] }; })();
+  // map cell -> ownership cell, built once: lets map-wide loops read the owner of every map cell without a function call per cell
+  let M2O = null; const m2o = () => M2O || (M2O = (() => { const z = new Int32Array(map.N); for (let c = 0; c < map.N; c++) { const x = (c % map.W + .5) * map.cs, y = (((c / map.W) | 0) + .5) * map.cs; z[c] = clamp(Math.floor(y / OW.cw), 0, OW.gh - 1) * OW.gw + clamp(Math.floor(x / OW.cw), 0, OW.gw - 1); } return z; })());
   S.own = OW; S.ownAt = (x, y) => OW.a[clamp(Math.floor(y / OW.cw), 0, OW.gh - 1) * OW.gw + clamp(Math.floor(x / OW.cw), 0, OW.gw - 1)];
   function disc(x, y, r, fn) { const c = OW.cw, i0 = Math.max(0, Math.floor((x - r) / c)), i1 = Math.min(OW.gw - 1, Math.floor((x + r) / c)), j0 = Math.max(0, Math.floor((y - r) / c)), j1 = Math.min(OW.gh - 1, Math.floor((y + r) / c)); for (let j = j0; j <= j1; j++) for (let i = i0; i <= i1; i++) if (Math.hypot((i + .5) * c - x, (j + .5) * c - y) <= r) fn(j * OW.gw + i); }
   const formed = u => u.active && !u.dead && u.coh > .3 && u.cls !== 'hq' && u.mv !== 'ship' && u.state !== 'retreat' && !(u.f.arr && !u.f.active);

@@ -96,6 +96,53 @@ const DIVTPL = {
     { n: 'Artillery', role: 'arty', sub: ['uk_fd25|1st Field Regt', 'uk_fd25|2nd Field Regt'] },
     { n: 'Division troops', role: 'troops', sub: ['uk_rec|Reconnaissance Bn', 'uk_at2|Anti-tank Bn', 'uk_re|Engineer Bn'] }], attach: [] }
 };
+// ----- regiment-level versions (test of 24 Nov 2026): each regiment or brigade is one unit of N battalions ('kind|name|N|N'),
+// the artillery regiment one unit of N battalions' guns, division troops unchanged. Kinds as in the battalion templates.
+(function () {
+  const R = (k, n, b) => k + '|' + n + '|' + b + '|' + b;
+  Object.assign(DIVTPL, {
+    vd_inf_r: { nat: 'GE', regs: [
+      { n: '{a} Rifle Regiment', role: 'man', sub: [R('ge_inf', '{a} Rifle Regiment', 3)] },
+      { n: '{b} Rifle Regiment', role: 'man', sub: [R('ge_inf', '{b} Rifle Regiment', 3)] },
+      { n: '{c} Rifle Regiment', role: 'man', sub: [R('ge_inf', '{c} Rifle Regiment', 3)] },
+      { n: 'Artillery Regiment', role: 'arty', sub: [R('ge_art105', 'Artillery Regiment', 4)] },
+      DIVTPL.vd_inf.regs[4]], attach: [] },
+    vd_pz_r: { nat: 'GE', regs: [
+      { n: '{a} Panzer Regiment', role: 'man', sub: [R('ge_pz42', '{a} Panzer Regiment', 2)] },
+      { n: '{b} Panzer Regiment', role: 'man', sub: [R('ge_pz3', '{b} Panzer Regiment', 2)] },
+      { n: '{c} Motor Rifle Regiment', role: 'man', sub: [R('ge_pzgr', '{c} Motor Rifle Regiment', 3)] },
+      { n: 'Panzer Artillery Regiment', role: 'arty', sub: [R('ge_art105', 'Panzer Artillery Regiment', 3)] },
+      DIVTPL.vd_pz.regs[4]], attach: [] },
+    vd_mot_r: { nat: 'GE', regs: [
+      { n: '{a} Motor Rifle Regiment', role: 'man', sub: [R('ge_pzgr', '{a} Motor Rifle Regiment', 3)] },
+      { n: '{b} Motor Rifle Regiment', role: 'man', sub: [R('ge_pzgr', '{b} Motor Rifle Regiment', 3)] },
+      { n: 'Motorized Artillery Regiment', role: 'arty', sub: [R('ge_art105', 'Motorized Artillery Regiment', 3)] },
+      DIVTPL.vd_mot.regs[3]], attach: [] },
+    sa_inf_r: { nat: 'IT', regs: [
+      { n: '{a} Infantry Regiment', role: 'man', sub: [R('it_inf', '{a} Infantry Regiment', 3)] },
+      { n: '{b} Infantry Regiment', role: 'man', sub: [R('it_inf', '{b} Infantry Regiment', 3)] },
+      { n: '{c} Frontier Regiment', role: 'man', sub: [R('it_bers', '{c} Frontier Regiment', 2)] },
+      { n: 'Artillery Regiment', role: 'arty', sub: [R('it_art75', 'Artillery Regiment', 3)] },
+      DIVTPL.sa_inf.regs[4]], attach: [] },
+    sa_mot_r: { nat: 'IT', regs: [
+      { n: '{a} Armoured Regiment', role: 'man', sub: [R('it_tk', '{a} Armoured Regiment', 2)] },
+      { n: '{b} Motor Rifle Regiment', role: 'man', sub: [R('it_bers', '{b} Motor Rifle Regiment', 3)] },
+      { n: 'Artillery Regiment', role: 'arty', sub: [R('it_art75', 'Artillery Regiment', 2)] },
+      DIVTPL.sa_mot.regs[3]], attach: [] },
+    ko_inf_r: { nat: 'UK', regs: [
+      { n: '{a} Rifle Brigade', role: 'man', sub: [R('uk_inf', '{a} Rifle Brigade', 3)] },
+      { n: '{b} Rifle Brigade', role: 'man', sub: [R('uk_inf', '{b} Rifle Brigade', 3)] },
+      { n: '{c} Rifle Brigade', role: 'man', sub: [R('uk_inf', '{c} Rifle Brigade', 3)] },
+      { n: 'Artillery', role: 'arty', sub: [R('uk_fd25', 'Division Artillery', 4)] },
+      DIVTPL.ko_inf.regs[4]], attach: [] },
+    ko_tk_r: { nat: 'UK', regs: [
+      { n: '{a} Tank Brigade', role: 'man', sub: [R('uk_tk_mat', '{a} Tank Brigade', 2)] },
+      { n: '{b} Tank Brigade', role: 'man', sub: [R('uk_tk_val', '{b} Tank Brigade', 2)] },
+      { n: '{c} Motor Rifle Brigade', role: 'man', sub: [R('uk_mot', '{c} Motor Rifle Brigade', 5)] },   // the tank brigades' motor battalions folded in, so the division keeps 4 tank and 5 motor battalions
+      { n: 'Artillery', role: 'arty', sub: [R('uk_fd25', 'Division Artillery', 2)] },
+      DIVTPL.ko_tk.regs[4]], attach: [] }
+  });
+})();
 // build a scenario formation from a template: o = { tpl, s, n, cmd, ag, sk, xp, x, y, regs: ['8th', '12th', '22nd'], attach: [...] }
 function divForm(o) {
   const T = DIVTPL[o.tpl]; if (!T) throw new Error('unknown division template ' + o.tpl);

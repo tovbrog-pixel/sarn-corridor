@@ -61,7 +61,7 @@ function initOverlay(R, cv) {
     if (c === 'hq') { ctx.moveTo(l, y); ctx.lineTo(r, y); }
     ctx.stroke(); if (c === 'art') { ctx.beginPath(); ctx.arc(x, y, h * .22, 0, 6.3); ctx.fill(); }
     if (c === 'cdo') { ctx.font = 'bold ' + Math.round(7 * k) + 'px monospace'; ctx.textAlign = 'center'; ctx.fillText('SF', x, t + 7 * k); }
-    ctx.fillStyle = '#111'; ctx.font = 'bold ' + Math.round(8 * k) + 'px monospace'; ctx.textAlign = 'center'; ctx.fillText(c === 'hq' ? 'HQ' : u.size < .45 ? 'I' : 'II', x, t - 2);
+    ctx.fillStyle = '#111'; ctx.font = 'bold ' + Math.round(8 * k) + 'px monospace'; ctx.textAlign = 'center'; ctx.fillText(c === 'hq' ? 'HQ' : u.bns > 1 ? (/Brigade/.test(u.n) ? 'X' : 'III') : u.size < .45 ? 'I' : 'II', x, t - 2);
     const sw = w * clamp(u.str, 0, 1); ctx.fillStyle = '#1c1c1c'; ctx.fillRect(l, b + 1.5, w, 3 * k); ctx.fillStyle = u.str > .6 ? '#3fae3f' : u.str > .35 ? '#d6b22a' : '#d33a2a'; ctx.fillRect(l, b + 1.5, sw, 3 * k);
     if (own) { if (u.state === 'retreat') { ctx.fillStyle = '#d02020'; ctx.fillText('R', r + 6 * k, y + 3); } else if (u.ammo < .2) { ctx.fillStyle = '#e07a10'; ctx.fillText('!', r + 5 * k, y + 3); } }
     ctx.globalAlpha = 1;

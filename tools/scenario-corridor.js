@@ -6,6 +6,8 @@
 // Every force, position, date and rate here is invented game design (Sarn Corridor design document v1); nothing is historical.
 // node tools/scenario-corridor.js [hours] [seed] [out.json] [variant]     AI against AI, headless
 const E = require('./load-engine')(), { createSim, SCENARIOS, divForm } = E;
+// unit level: SC_LEVEL=reg builds every division from the regiment-level templates (one unit per regiment or brigade)
+const LEVEL = process.env.SC_LEVEL || 'bn';
 const sarnMap = require('./sarnmap');
 const fs = require('fs');
 const polyLen = l => l.reduce((a, p, i) => i ? a + Math.hypot(p[0] - l[i - 1][0], p[1] - l[i - 1][1]) : 0, 0);
@@ -40,7 +42,7 @@ function buildVariant(sarnPlan, vAxis) {
   const G = sarnMap.load(), wet = (x, y) => { const c = G.t[Math.floor(y) * G.grid.w + Math.floor(x)]; return c === 12 || c === 13; };
   const own = (s, x, y) => { const v = inPoly(x, y, NAT('V')) || inPoly(x, y, NAT('O')); return (s === 0 ? v : !v) && !wet(x, y); };
   const fix = (s, x, y, arr) => { if (arr) return [x, y]; for (let k = 0; k < 60 && !own(s, x, y); k++) x += s === 0 ? -2 : 2; return [x, y]; };
-  const mk = (tpl, s, k, n, regs, x0, y0, corps, extra) => { const [x, y] = fix(s, x0, y0, extra && extra.arr), p = W(x, y), f = divForm(Object.assign({ tpl, s, n, cmd: 'Gen. ' + SURN[k][sn[k]++ % SURN[k].length], regs, x: p[0], y: p[1] }, STYLE[k])); f.corps = corps; f.power = k; Object.assign(f, extra || {}); forms.push(f); cmdPlan.push({ t: 0, f: n, c: corps }); return f; };
+  const mk = (tpl, s, k, n, regs, x0, y0, corps, extra) => { if (LEVEL === 'reg') tpl += '_r'; const [x, y] = fix(s, x0, y0, extra && extra.arr), p = W(x, y), f = divForm(Object.assign({ tpl, s, n, cmd: 'Gen. ' + SURN[k][sn[k]++ % SURN[k].length], regs, x: p[0], y: p[1] }, STYLE[k])); f.corps = corps; f.power = k; Object.assign(f, extra || {}); forms.push(f); cmdPlan.push({ t: 0, f: n, c: corps }); return f; };
   const corps = (id, s, n, cmd, ag, army, lv) => { corpsList.push({ id, s, level: lv || 'corps', n, cmd: { n: cmd, ag, sk: .6 } }); if (army) cmdPlan.push({ t: 0, f: 'cmd:' + id, c: army }); };
   corps('vd-army', 0, 'Valdenmark Army of the North', 'Gen. Dietrich Asch', .65, null, 'army'); corps('ko-army', 1, 'Korovian Western Front', 'Gen. Mikhail Rudin', .6, null, 'army');
 

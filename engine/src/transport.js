@@ -106,7 +106,7 @@ function attachTransport(S) {
     const poly = plan.r.nodes.map(i => [net.x[i], net.y[i]]);
     const nightOnly = plan.mode !== 'rail' && (F.nat === 'GE' || F.nat === 'IT') && S.airThreat(F.s) >= T0.nightOnlyThreat;
     const C = { F, mode: plan.mode, nightOnly, pauseT: 0, rampsOut: plan.rampsOut || 1, poly, L: plan.r.km, head: 0, ph: 'prep', tEnd: S.t + prep, rel: plan.rel, path, line, opt, kmh: plan.kmh,
-      len: a.length * (plan.mode === 'rail' ? 0 : nMotor / Math.max(1, a.length) >= .6 || plan.mode === 'truck' ? T0.colKmMotor : T0.colKmFoot), t0: S.t };
+      len: a.reduce((s, u) => s + BW(u), 0) * (plan.mode === 'rail' ? 0 : nMotor / Math.max(1, a.length) >= .6 || plan.mode === 'truck' ? T0.colKmMotor : T0.colKmFoot), t0: S.t };
     cols.push(C);
     for (const u of a) { u.active = false; u.goal = null; u.path = null; u.needPath = false; u.slot = null; }
     F.active = false; F.order = null; F.transit = C;

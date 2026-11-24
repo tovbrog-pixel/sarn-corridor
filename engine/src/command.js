@@ -19,7 +19,7 @@ function attachCommand(S) {
   }
   function weight(n) {                      // frontage a child can hold: its fighting units still in being
     if (n.forms) return n.forms.reduce((s, c) => s + weight(c), 0);
-    return n.subs.filter(u => (u.active || n.transit) && !u.dead && LEADCLS[u.cls]).length * (n.dead ? 0 : 1);
+    return n.subs.filter(u => (u.active || n.transit) && !u.dead && LEADCLS[u.cls]).reduce((a, u) => a + BW(u), 0) * (n.dead ? 0 : 1);
   }
   const live = n => n.forms ? n.forms.some(live) : !n.dead && (!!n.transit || n.subs.some(u => u.active && !u.dead));   // a division on the move by road or rail is alive though off the map
 
