@@ -3,6 +3,8 @@
 // Every force, position, date and rate here is invented game design (Sarn Corridor design document v1); nothing is historical.
 // node tools/scenario-corridor.js [hours] [seed] [out.json]     AI against AI, headless
 const E = require('./load-engine')(), { createSim, SCENARIOS, divForm } = E;
+const polyLen = l => l.reduce((a, p, i) => i ? a + Math.hypot(p[0] - l[i - 1][0], p[1] - l[i - 1][1]) : 0, 0);
+const polyAt = (l, d) => { let acc = 0; for (let i = 1; i < l.length; i++) { const s = Math.hypot(l[i][0] - l[i - 1][0], l[i][1] - l[i - 1][1]); if (acc + s >= d) { const t = s ? (d - acc) / s : 0; return { x: l[i - 1][0] + (l[i][0] - l[i - 1][0]) * t, y: l[i - 1][1] + (l[i][1] - l[i - 1][1]) * t }; } acc += s; } const e = l[l.length - 1]; return { x: e[0], y: e[1] }; };
 const sarnMap = require('./sarnmap');
 const fs = require('fs');
 const WIN = { x0: 200, y0: 0, w: 760, h: 380 };
@@ -52,7 +54,7 @@ const STYLE = { vd: { ag: .6, sk: .65, xp: 1.05 }, sa: { ag: .35, sk: .5, xp: .8
 // opening objective lines for AI-run divisions, continent km (game design)
 const PLAN = { '11th Infantry Division': [[565, 110], [580, 140]] };
 // corps objective lines, continent km: each corps commander splits his line among his divisions (game design)
-const CORPS_PLAN = [{ t: .5, c: 'vd-pzk', line: [[527, 17], [515, 205]] }, { t: .5, c: 'vd-xi', line: [[528, 240], [550, 345]] },   // through Port Vesna, Vesna crossing, Lisno and Corridor south; through Brodek and Tarnek
+const CORPS_PLAN = [{ t: .5, c: 'vd-pzk', line: [[527, 17], [515, 205]], opt: { main: true, reserve: true } }, { t: .5, c: 'vd-xi', line: [[528, 240], [550, 345]] },   // through Port Vesna, Vesna crossing, Lisno and Corridor south; through Brodek and Tarnek
   { t: 196, c: 'ko-w', line: [[800, 135], [815, 255]] }];
 // villages: intermediate objectives along the roads and rail lines of Sarn, 5 points each (invented names and places, game design)
 const VILLAGES = [['Lisno', 515, 175], ['Korvik', 600, 128], ['Dolna', 625, 330], ['Hradek', 590, 245], ['Velka', 760, 270], ['Brodek', 528, 280], ['Mostin', 490, 120]];
@@ -66,10 +68,16 @@ function makeCorridor() {
     if (PLAN[n]) f.ai = [{ t: (t || 0) + .5, path: [], line: PLAN[n].map(q => W(q[0], q[1])) }];
     forms.push(f); return f; };
   VALDEN.forEach(r => mk(r, 0, 'vd'));
-  for (const r of SARN) { const f = mk(r, 1, 'sa');
-    if (/Motorized/.test(f.n)) continue;                                        // the mobile reserve stays free
-    const hw = 10; f.line = [[f.x, f.y - hw], [f.x, f.y + hw]]; f.dug = 1; f.stay = 1; f.stayMinStr = .45; }   // border divisions dig in facing west (game setting)
-  const f6 = forms.find(f => /Frontier/.test(f.n)); if (f6) f6.line = [[f6.x - 7, f6.y], [f6.x + 7, f6.y]];   // the frontier division faces north toward Ostval
+  for (const r of SARN) mk(r, 1, 'sa');
+  // Sarn's defence as a line (doctrine): the east bank of the Vesna from the coast to the southern frontier, split into one sector per
+  // division from north to south, and the Ostval frontier held by two divisions facing north. Each division digs in on its sector.
+  const ves = sarnMap.load().map.rivers.find(r => r.name === 'Vesna').pts.filter(p => p[1] >= 20 && p[1] <= 375).sort((a, b) => a[1] - b[1]);
+  const bank = ves.map((p, i) => { const a = ves[Math.max(0, i - 1)], b = ves[Math.min(ves.length - 1, i + 1)], dx = b[0] - a[0], dy = b[1] - a[1], L = Math.hypot(dx, dy) || 1, sg = -dy > 0 ? 1 : -1; return W(p[0] + sg * -dy / L * 2.5, p[1] + sg * dx / L * 2.5); });   // 2.5 km east of the river
+  const sectors = (line, names) => { const L = polyLen(line); names.forEach((n, i) => { const f = forms.find(q => q.n === n); if (!f) return; const a = L * i / names.length, b = L * (i + 1) / names.length, seg = [];
+    for (let d = a; d <= b + 1e-6; d += Math.max(1, (b - a) / 12)) { const q = polyAt(line, Math.min(d, L)); seg.push([+q.x.toFixed(2), +q.y.toFixed(2)]); }
+    const mq = polyAt(line, (a + b) / 2); f.x = mq.x; f.y = mq.y; f.line = seg; f.dug = 1; f.stay = 1; f.stayMinStr = .45; }); };
+  sectors(bank, ['1st (Vesna) Division', '2nd Division', '7th Division', '3rd Division', '4th Division', '8th Division', '5th Division']);
+  sectors([W(600, 252), W(700, 256), W(780, 260), W(850, 255)], ['6th (Frontier) Division', '9th Division']);
   KOROV.forEach(r => mk(r, 1, 'ko'));
 
   // ---- corps (game design)
@@ -77,7 +85,7 @@ function makeCorridor() {
     ['sa-i', 1, 'Sarn I Corps', 'Gen. Tomas Varga', .3], ['sa-ii', 1, 'Sarn II Corps', 'Gen. Emil Kresta', .35], ['ko-w', 1, 'Korovian Western Group', 'Gen. Andrei Volkov', .6]];
   const commands = corps.map(([id, s, n, c, ag, lv]) => ({ id, s, level: lv || 'corps', n, cmd: { n: c, ag, sk: .6 } }));
   const cmdPlan = forms.map(f => ({ t: 0, f: f.n, c: f.corps })).concat(['vd-pzk', 'vd-xi', 'vd-ost'].map(c => ({ t: 0, f: 'cmd:' + c, c: 'vd-army' })), [{ t: 0, f: 'cmd:ko-w', c: 'ko-army' }]);
-  const corpsPlan = CORPS_PLAN.map(q => ({ t: q.t, c: q.c, line: q.line.map(p => W(p[0], p[1])) }));
+  const corpsPlan = CORPS_PLAN.map(q => ({ t: q.t, c: q.c, opt: q.opt, line: q.line.map(p => W(p[0], p[1])) }));
 
   // ---- objectives [name, x, y, points, owner at start]
   const vp = [['Port Vesna', 30, 1], ['Tarnek', 20, 1], ['Sarnow', 25, 1], ['Ostrand', 25, 0], ['Varnholm', 15, 0], ['Freyburg', 15, 0], ['Saarholt', 10, 0], ['Halden', 30, 0], ['Brennhaven', 10, 0]]
@@ -109,7 +117,7 @@ function makeCorridor() {
 
   return Object.assign({}, base, m, { id: 'corridor', title: 'Corridor Crisis', sub: 'Valdenmark against Sarn, 1 to 21 June', start: START, hours: hrs(DAYS),
     ownCell: 1, ownR: 5, ownMax: 25, isoShrinkKm: 20, aiExact: 1, labels: ['Valdenmark', 'Sarn'], divScale: [22, 70], commands, cmdPlan, corpsPlan, armyAI: { only: ['vd-army', 'ko-army'], from: 30, frontKm: 5, reachKm: 70, pocketBonus: 2.5, cadenceH: 18, waitH: 30, supply: .3 }, detourKm: 30, view: { x: 330, y: 150, dist: 150, pitch: 1.3 }, playerSides: [0, 1, -1],
-    modules: ['transport', 'air', 'command', 'repl'],
+    modules: ['transport', 'air', 'command', 'repl', 'doctrine'],
     repl: { pools: [{ k: 'vd', n: 'Valdenmark depots', s: 0, nat: ['GE'], perDay: [{ from: 0, n: 1.2 }], xp: .85 },
       { k: 'sa', n: 'Sarn reserves', s: 1, nat: ['IT'], perDay: [{ from: 0, n: .5 }], xp: .75 },
       { k: 'ko', n: 'Korovian drafts', s: 1, nat: ['UK'], perDay: [{ from: 120, n: .8 }], xp: .8 }] },

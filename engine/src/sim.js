@@ -498,7 +498,7 @@ function createSim(sc, player, seed, opt) {
       // a battalion holding a line faces the enemy side of it once it stops shooting
       if (!u.goal) { if (u.face && S.t - (u.fireT || -99) > 15) { u.hx = u.face[0]; u.hy = u.face[1]; } continue; }
       if (u.needPath && S.pb > 0 && S.t - u.pathT > (u.noPath ? 30 : .5)) {
-        S.pb--; u.pathT = S.t; const p = map.findPath(u.mvi, u.x, u.y, u.goal[0], u.goal[1]);
+        S.pb--; u.pathT = S.t; const p = map.findPath(u.mvi, u.x, u.y, u.goal[0], u.goal[1], u.f.dev && !u.det && u.state !== 'retreat' ? { cross: 1 } : undefined);   // doctrine: a developed formation moves across country
         // a formation crosses as one body: a route far longer than the direct line (a blown bridge sends everyone round by the next crossing) is refused and reported
         let far = false; if (p && !u.det && u.state !== 'retreat' && u.slot && u.goal === u.slot) { let L = 0, px = u.x, py = u.y; for (const q of p) { L += Math.hypot(q[0] - px, q[1] - py); px = q[0]; py = q[1]; } const d0 = Math.hypot(u.goal[0] - u.x, u.goal[1] - u.y); if (d0 > 1.2 && L > d0 * 1.9 + (sc.detourKm || 5)) far = true; }
         if (far) { u.noPath = true; u.path = null; u.detour = S.t; u.needPath = true; }
@@ -511,7 +511,7 @@ function createSim(sc, player, seed, opt) {
       // an enemy in fighting order within 1.2 km blocks the way: close with him, fight through on an assault, or fall back, but do not drive past
       let zf = 1; if (!ret && u.ze && u.pi < u.path.length) { const q = u.path[u.pi], qx = q[0] - u.x, qy = q[1] - u.y, ql = Math.hypot(qx, qy) || 1, rr = sc.sides[u.s].rear || [0, 0], back = (qx * rr[0] + qy * rr[1]) / ql > .3;
         if (!back) { const toward = (qx * (u.ze.x - u.x) + qy * (u.ze.y - u.y)) / ql > .15 * u.zd; if (u.assault) zf = .35; else if (!toward || u.zd < .5) { if (u.ze.seenT < S.t - 6) u.ze.seenT = S.t; continue; } else zf = .5; } }
-      const c = map.idx(u.x, u.y); let sp = zf * baseSpeed(u) * (u.fat > .5 ? 1 - .6 * (u.fat - .5) : 1) * (!ret && !u.det && !u.fm && !INDEP[u.cls] && u.f.pace && !u.f.contact && u.f.order && u.f.order.st === 'active' ? Math.min(1, u.f.pace / baseSpeed(u)) : 1) * Math.max(.05, map.fac[u.mvi][c]) * wm * (S.t - u.hitT < 3 && !ret ? .5 : 1) * (ret ? 1.15 : 1) * (1 - .5 * u.f.dis);
+      const c = map.idx(u.x, u.y); let sp = zf * baseSpeed(u) * (u.fat > .5 ? 1 - .6 * (u.fat - .5) : 1) * (!ret && !u.det && !u.fm && !INDEP[u.cls] && u.f.pace && !u.f.contact && u.f.order && u.f.order.st === 'active' ? Math.min(1, u.f.pace / baseSpeed(u)) : 1) * Math.max(.05, (u.f.dev && !u.det ? map.facX : map.fac)[u.mvi][c]) * wm * ((u.f.alignHold || u.f.flankHold) && !ret && !u.det && !u.f.contact && u.state !== 'retreat' ? 0 : 1) * (S.t - u.hitT < 3 && !ret ? .5 : 1) * (ret ? 1.15 : 1) * (1 - .5 * u.f.dis);
       let rem = sp * dt;
       while (rem > 0 && u.pi < u.path.length) {
         const p = u.path[u.pi], dx = p[0] - u.x, dy = p[1] - u.y, d = Math.hypot(dx, dy);
@@ -1270,6 +1270,6 @@ function createSim(sc, player, seed, opt) {
   const own0At = (x, y) => S.own0[clamp(Math.floor(y / OW.cw), 0, OW.gh - 1) * OW.gw + clamp(Math.floor(x / OW.cw), 0, OW.gw - 1)];
   S.setup = function () { S.mkBenches(); arrivals(); aiTick(); for (const F of S.forms) cmdTick(F); combatTick(); initOwn(); if (!sc.front) ownTick(false); S.own0 = OW.a.slice(); 
     // step 3 modules a scenario asks for (the France campaign: road and rail moves, the air war); the older scenarios run without them
-    for (const m of sc.modules || []) { const fn = { transport: typeof attachTransport === 'function' && attachTransport, air: typeof attachAir === 'function' && attachAir, command: typeof attachCommand === 'function' && attachCommand, politics: typeof attachPolitics === 'function' && attachPolitics, theater: typeof attachTheater === 'function' && attachTheater, repl: typeof attachRepl === 'function' && attachRepl }[m]; if (fn) fn(S); } };
+    for (const m of sc.modules || []) { const fn = { transport: typeof attachTransport === 'function' && attachTransport, air: typeof attachAir === 'function' && attachAir, command: typeof attachCommand === 'function' && attachCommand, politics: typeof attachPolitics === 'function' && attachPolitics, theater: typeof attachTheater === 'function' && attachTheater, repl: typeof attachRepl === 'function' && attachRepl, doctrine: typeof attachDoctrine === 'function' && attachDoctrine }[m]; if (fn) fn(S); } };
   return S;
 }

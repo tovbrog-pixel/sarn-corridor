@@ -92,14 +92,16 @@ function buildMap(sc) {
     for (const q of cells) m.br[q] = b.id; m.bridges.push(b);
   }
   for (const o of sc.bridges || []) { let best = null, bd = 2.5; for (const b of m.bridges) { const d = Math.hypot(b.x - o[0], b.y - o[1]); if (d < bd) { bd = d; best = b; } } if (best) Object.assign(best, o[2]); else if (typeof console !== 'undefined') console.warn('bridge override not matched', o); }
+  m.facX = [new Float32Array(N), new Float32Array(N), new Float32Array(N)];
   m.calcFac = function () {
     for (let c = 0; c < N; c++) {
       const t = m.t[c], r = m.road[c];
       for (let k = 0; k < 3; k++) {
         let f = t === T.MARSH && sc.mines && m.lane[c] ? TFAC[T.OPEN][k] : TFAC[t][k];   // a lane cleared through a minefield drives like open ground
         if (t === T.RIVER) { const b = m.br[c] >= 0 ? m.bridges[m.br[c]] : null; f = b && b.intact && (r || b.fl) ? RFAC[r || 2][k] : 0; }   // a floating bridge carries traffic where no road crosses
-        else if (r) { let rf = RFAC[r][k]; if (t === T.MTN) rf *= .6; else if (t === T.HF || t === T.HILL || t === T.JUNGLE) rf *= .85; f = Math.max(f, rf); }
-        m.fac[k][c] = f;
+        const fx = f;   // cross-country factor: the terrain alone (doctrine: a developed formation leaves the roads)
+        if (t !== T.RIVER && r) { let rf = RFAC[r][k]; if (t === T.MTN) rf *= .6; else if (t === T.HF || t === T.HILL || t === T.JUNGLE) rf *= .85; f = Math.max(f, rf); }
+        m.fac[k][c] = f; m.facX[k][c] = t === T.RIVER ? f : fx;
       }
     }
   };
@@ -138,7 +140,7 @@ function buildMap(sc) {
   const offRoad = c => !m.road[c] && m.t[c] !== T.DESERT && m.t[c] !== T.TOWN && m.t[c] !== T.CITY && m.t[c] !== T.BEACH && m.t[c] !== T.RIVER;
   m.pathCount = 0;
   m.findPath = function (k, sx, sy, gx, gy, opt) {
-    m.pathCount++; opt = opt || {}; const fac = m.fac[k], block = opt.block, threat = opt.threat, rb = opt.road || 0;   // rb: extra cost on ground with no road (supply columns)
+    m.pathCount++; opt = opt || {}; const fac = (opt.cross ? m.facX : m.fac)[k], block = opt.block, threat = opt.threat, rb = opt.road || 0;   // rb: extra cost on ground with no road (supply columns)
     const s0 = m.snap(k, sx, sy, 3), g0 = m.snap(k, gx, gy, opt.grad || 4); if (!s0 || !g0) return null;
     const sc0 = idx(s0[0], s0[1]), gc = idx(g0[0], g0[1]), gi = gc % W, gj = (gc / W) | 0;
     if (sc0 === gc) return [[g0[0], g0[1]]];

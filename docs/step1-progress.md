@@ -48,3 +48,11 @@ In a 14-day run Valdenmark took only the Vesna crossing. Its divisions pass betw
 **Run, seed 101, 504 game hours:** Valdenmark took Tarnek, Sarnow, the Vesna crossing, the southern corridor and six of seven villages; losses 17 against 36 battalion-equivalents. Port Vesna held out to the end, supplied through its port, so the corridor victory was not met. Korovia took Varnholm. 602 s, 485 battalions.
 
 `docs/engine-fixes-for-france-1944.md` and `.patch` carry the engine fixes to the France build.
+
+## Doctrine module (24 Nov 2026)
+
+Tov asked for divisions and corps to advance as a line, over open ground near the enemy, with armoured spearheads guarding their flanks. `engine/src/doctrine.js` (module `'doctrine'`) adds development off the roads within 15 km of known enemy or on enemy ground, alignment by bounds (8 km), guarded corridors for mobile divisions (10 km plus 4 km per guard battalion, then halt and call an infantry division to the open flank), and a main effort chosen by the AI army (narrow zone and reserve; wide zones for the rest). Sarn now holds the east bank of the Vesna in seven divisional sectors and the Ostval frontier with two. Sources and settings: `docs/engine-fixes-for-france-1944.md`, section 6.
+
+**Run, seed 101, 504 game hours:** Valdenmark took Tarnek, the Vesna crossing, the southern corridor and five villages; Port Vesna and Sarnow held. Losses 36 Valdenmark against 13 Sarn battalion-equivalents, most of Valdenmark's in the last week against dug-in sectors. Korovia took Varnholm. 735 s.
+
+**Finding:** seven Sarn divisions cannot hold 370 km of river at doctrinal frontages (8 to 12 km a division), so Sarn's line shows as separated sectors. A continuous front on this map needs several times the divisions, or a smaller theatre.

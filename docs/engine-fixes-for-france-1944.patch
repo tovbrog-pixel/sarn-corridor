@@ -1,5 +1,23 @@
 --- a/engine/src/sim.js	2026-11-23 22:24:53.573579233 -0500
-+++ b/engine/src/sim.js	2026-11-23 23:35:47.767100125 -0500
++++ b/engine/src/sim.js	2026-11-24 00:07:18.272572680 -0500
+@@ -498,7 +498,7 @@
+       // a battalion holding a line faces the enemy side of it once it stops shooting
+       if (!u.goal) { if (u.face && S.t - (u.fireT || -99) > 15) { u.hx = u.face[0]; u.hy = u.face[1]; } continue; }
+       if (u.needPath && S.pb > 0 && S.t - u.pathT > (u.noPath ? 30 : .5)) {
+-        S.pb--; u.pathT = S.t; const p = map.findPath(u.mvi, u.x, u.y, u.goal[0], u.goal[1]);
++        S.pb--; u.pathT = S.t; const p = map.findPath(u.mvi, u.x, u.y, u.goal[0], u.goal[1], u.f.dev && !u.det && u.state !== 'retreat' ? { cross: 1 } : undefined);   // doctrine: a developed formation moves across country
+         // a formation crosses as one body: a route far longer than the direct line (a blown bridge sends everyone round by the next crossing) is refused and reported
+         let far = false; if (p && !u.det && u.state !== 'retreat' && u.slot && u.goal === u.slot) { let L = 0, px = u.x, py = u.y; for (const q of p) { L += Math.hypot(q[0] - px, q[1] - py); px = q[0]; py = q[1]; } const d0 = Math.hypot(u.goal[0] - u.x, u.goal[1] - u.y); if (d0 > 1.2 && L > d0 * 1.9 + (sc.detourKm || 5)) far = true; }
+         if (far) { u.noPath = true; u.path = null; u.detour = S.t; u.needPath = true; }
+@@ -511,7 +511,7 @@
+       // an enemy in fighting order within 1.2 km blocks the way: close with him, fight through on an assault, or fall back, but do not drive past
+       let zf = 1; if (!ret && u.ze && u.pi < u.path.length) { const q = u.path[u.pi], qx = q[0] - u.x, qy = q[1] - u.y, ql = Math.hypot(qx, qy) || 1, rr = sc.sides[u.s].rear || [0, 0], back = (qx * rr[0] + qy * rr[1]) / ql > .3;
+         if (!back) { const toward = (qx * (u.ze.x - u.x) + qy * (u.ze.y - u.y)) / ql > .15 * u.zd; if (u.assault) zf = .35; else if (!toward || u.zd < .5) { if (u.ze.seenT < S.t - 6) u.ze.seenT = S.t; continue; } else zf = .5; } }
+-      const c = map.idx(u.x, u.y); let sp = zf * baseSpeed(u) * (u.fat > .5 ? 1 - .6 * (u.fat - .5) : 1) * (!ret && !u.det && !u.fm && !INDEP[u.cls] && u.f.pace && !u.f.contact && u.f.order && u.f.order.st === 'active' ? Math.min(1, u.f.pace / baseSpeed(u)) : 1) * Math.max(.05, map.fac[u.mvi][c]) * wm * (S.t - u.hitT < 3 && !ret ? .5 : 1) * (ret ? 1.15 : 1) * (1 - .5 * u.f.dis);
++      const c = map.idx(u.x, u.y); let sp = zf * baseSpeed(u) * (u.fat > .5 ? 1 - .6 * (u.fat - .5) : 1) * (!ret && !u.det && !u.fm && !INDEP[u.cls] && u.f.pace && !u.f.contact && u.f.order && u.f.order.st === 'active' ? Math.min(1, u.f.pace / baseSpeed(u)) : 1) * Math.max(.05, (u.f.dev && !u.det ? map.facX : map.fac)[u.mvi][c]) * wm * ((u.f.alignHold || u.f.flankHold) && !ret && !u.det && !u.f.contact && u.state !== 'retreat' ? 0 : 1) * (S.t - u.hitT < 3 && !ret ? .5 : 1) * (ret ? 1.15 : 1) * (1 - .5 * u.f.dis);
+       let rem = sp * dt;
+       while (rem > 0 && u.pi < u.path.length) {
+         const p = u.path[u.pi], dx = p[0] - u.x, dy = p[1] - u.y, d = Math.hypot(dx, dy);
 @@ -1227,10 +1227,13 @@
    }
    function ownTick(hourly) {
@@ -18,7 +36,7 @@
      for (let j = 1; j < h - 1; j++) for (let i = 1; i < g - 1; i++) { const c = j * g + i; if (P[0][c] || P[1][c]) continue; let n = 0; for (let dj = -1; dj <= 1; dj++) for (let di = -1; di <= 1; di++) if ((di || dj) && b[c + dj * g + di] !== b[c]) n++; if (n >= 6) OW.a[c] = 1 - b[c]; }
      // empty pockets close in: a connected region of one side's ground that holds none of its troops and none of its supply sources
      // gives up its outer ring of cells to the other side each hour, until the surrounding side owns all of it
-@@ -1238,10 +1241,31 @@
+@@ -1238,14 +1241,35 @@
      const cellOf = (x, y) => clamp(Math.floor(y / OW.cw), 0, h - 1) * g + clamp(Math.floor(x / OW.cw), 0, g - 1);
      for (const u of S.subs) if (u.active && !u.dead) { const c = cellOf(u.x, u.y); if (OW.a[c] === u.s) has[c] = 1; }
      for (let sd = 0; sd < 2; sd++) for (const so of S.src[sd]) if (!so.captured) { const c = cellOf(so.x, so.y); if (OW.a[c] === sd) has[c] = 1; }
@@ -53,8 +71,13 @@
    }
    const own0At = (x, y) => S.own0[clamp(Math.floor(y / OW.cw), 0, OW.gh - 1) * OW.gw + clamp(Math.floor(x / OW.cw), 0, OW.gw - 1)];
    S.setup = function () { S.mkBenches(); arrivals(); aiTick(); for (const F of S.forms) cmdTick(F); combatTick(); initOwn(); if (!sc.front) ownTick(false); S.own0 = OW.a.slice(); 
+     // step 3 modules a scenario asks for (the France campaign: road and rail moves, the air war); the older scenarios run without them
+-    for (const m of sc.modules || []) { const fn = { transport: typeof attachTransport === 'function' && attachTransport, air: typeof attachAir === 'function' && attachAir, command: typeof attachCommand === 'function' && attachCommand, politics: typeof attachPolitics === 'function' && attachPolitics, theater: typeof attachTheater === 'function' && attachTheater, repl: typeof attachRepl === 'function' && attachRepl }[m]; if (fn) fn(S); } };
++    for (const m of sc.modules || []) { const fn = { transport: typeof attachTransport === 'function' && attachTransport, air: typeof attachAir === 'function' && attachAir, command: typeof attachCommand === 'function' && attachCommand, politics: typeof attachPolitics === 'function' && attachPolitics, theater: typeof attachTheater === 'function' && attachTheater, repl: typeof attachRepl === 'function' && attachRepl, doctrine: typeof attachDoctrine === 'function' && attachDoctrine }[m]; if (fn) fn(S); } };
+   return S;
+ }
 --- a/engine/src/command.js	2026-11-23 22:24:53.573579233 -0500
-+++ b/engine/src/command.js	2026-11-23 23:35:47.767505442 -0500
++++ b/engine/src/command.js	2026-11-24 00:07:18.272873867 -0500
 @@ -115,6 +115,10 @@
    function planTick() { while (pi < plan.length && plan[pi].t * 60 <= S.t) { const q = plan[pi++], F = q.f.startsWith('cmd:') ? byId[q.f.slice(4)] : fByN[q.f], C = byId[q.c];   // 'cmd:<id>' moves a corps between armies if (!F || !C || F.parent === C) continue;
        if (F.parent && F.parent.forms) { const i = F.parent.forms.indexOf(F); if (i >= 0) F.parent.forms.splice(i, 1); } C.forms.push(F); F.parent = C; if (S.t > 0) S.say(F.s, F.n + ' now under ' + C.n + '.', 0); } }
@@ -62,21 +85,35 @@
 +  // scheduled corps orders for the side the computer plays (sc.corpsPlan: { t: hours, c: command id, line: [[x, y], [x, y]], path }):
 +  // the corps commander splits the objective line among his divisions, as when the player orders the whole corps
 +  const cplan = (sc.corpsPlan || []).slice().sort((a, b) => a.t - b.t); let ci = 0;
-+  function corpsPlanTick() { while (ci < cplan.length && cplan[ci].t * 60 <= S.t) { const q = cplan[ci++], C = byId[q.c]; if (!C || C.s === S.player || !live(C)) continue; S.issueCommandOrder(C, q.path || [], q.line, {}); report(C, 'ordered forward on the corps objective.', 0); } }
++  function corpsPlanTick() { while (ci < cplan.length && cplan[ci].t * 60 <= S.t) { const q = cplan[ci++], C = byId[q.c]; if (!C || C.s === S.player || !live(C)) continue; S.issueCommandOrder(C, q.path || [], q.line, q.opt || {}); report(C, 'ordered forward on the corps objective.', 0); } }
    // AI army commanders (sc.armyAI): on the side the computer plays, each army gives its corps objectives in turn. The commander's
    // aggression sets the rhythm: a cautious one (Montgomery's armies) waits longer between attacks and for fuller supply; a bold one
    // (Patton) attacks more often and reaches farther. All values are starting values for balance testing.
-@@ -128,13 +132,13 @@
+@@ -122,19 +126,23 @@
+   function armyTick() { if (!sc.armyAI) return;
+     const cfg = typeof sc.armyAI === 'object' ? sc.armyAI : {};   // { only: [army keys], from: hours } limits the AI armies and when they start; cadenceH, waitH, supply and reachKm replace the values above for a pursuit
+     for (const A of nodes) { if (A.level !== 'army' || A.s === S.player || S.t < (A.nextPlan || 0) || (cfg.only && !cfg.only.includes(A.key)) || S.t < (cfg.from || 0) * 60) continue; const ag = A.cmd ? A.cmd.ag : .5, k = Math.max(0, Math.min(1, (ag - .4) / .5));
+-      const lerp = a => a[0] + (a[1] - a[0]) * k; A.nextPlan = S.t + 60 * (cfg.cadenceH || lerp(ARMYAI.cadenceH)) * (.85 + S.rnd() * .3); const taken = new Set();
++      const lerp = a => a[0] + (a[1] - a[0]) * k; A.nextPlan = S.t + 60 * (cfg.cadenceH || lerp(ARMYAI.cadenceH)) * (.85 + S.rnd() * .3); const taken = new Set(), picks = [];
+       for (const C of A.forms) { if (!C.forms || !live(C)) continue; if (C.order && C.order.st !== 'issued' && C.order.st !== 'done') continue;
+         if (C.order && C.order.st === 'issued' && !C.order.doneSaid && S.t - C.order.t0 < (cfg.waitH || 48) * 60) continue;   // a corps attack still under way runs to its end, or 48 hours
          const kids = C.forms.filter(F => !F.forms && F.active && !F.dead); if (!kids.length) continue;
          if (kids.reduce((a, F) => a + F.stock / Math.max(1, F.cap), 0) / kids.length < (cfg.supply || lerp(ARMYAI.supply))) continue;
          const p = pos(C); if (!p) continue; let best = null, bs = -1e9;
 -        for (const v of S.vp) { if (v.own === C.s || taken.has(v)) continue; const d = Math.hypot(v.x - p[0], v.y - p[1]); if (d > (cfg.reachKm || lerp(ARMYAI.reachKm)) || (S.phaseBlock && S.phaseBlock(kids[0], v.x, v.y))) continue; const sc0 = v.pts / (d + 6); if (sc0 > bs) { bs = sc0; best = v; } }
-+        for (const v of S.vp) { if (v.own === C.s || taken.has(v)) continue; const d = Math.hypot(v.x - p[0], v.y - p[1]); if (d > (cfg.reachKm || lerp(ARMYAI.reachKm)) || (S.phaseBlock && S.phaseBlock(kids[0], v.x, v.y))) continue; const sc0 = v.pts / (d + 6) * (cfg.pocketBonus && S.ownAt(v.x, v.y) === C.s ? cfg.pocketBonus : 1); if (sc0 > bs) { bs = sc0; best = v; } }   // pocketBonus: an enemy-held objective standing on our ground is a bypassed pocket to reduce
-         if (!best) continue; taken.add(best);
+-        if (!best) continue; taken.add(best);
 -        const dx = best.x - p[0], dy = best.y - p[1], dl = Math.hypot(dx, dy) || 1, ux = dx / dl, uy = dy / dl, half = ARMYAI.frontKm * kids.length / 2, cx = best.x + ux, cy = best.y + uy;
-+        const dx = best.x - p[0], dy = best.y - p[1], dl = Math.hypot(dx, dy) || 1, ux = dx / dl, uy = dy / dl, half = (cfg.frontKm || ARMYAI.frontKm) * kids.length / 2, cx = best.x + ux, cy = best.y + uy;
-         S.issueCommandOrder(C, [], [[cx - uy * half, cy + ux * half], [cx + uy * half, cy - ux * half]], {}); C.aiTgt = best;
-         report(A, C.n + ' to attack toward ' + best.n + '.', 0); } } }
+-        S.issueCommandOrder(C, [], [[cx - uy * half, cy + ux * half], [cx + uy * half, cy - ux * half]], {}); C.aiTgt = best;
+-        report(A, C.n + ' to attack toward ' + best.n + '.', 0); } } }
++        for (const v of S.vp) { if (v.own === C.s || taken.has(v)) continue; const d = Math.hypot(v.x - p[0], v.y - p[1]); if (d > (cfg.reachKm || lerp(ARMYAI.reachKm)) || (S.phaseBlock && S.phaseBlock(kids[0], v.x, v.y))) continue; const sc0 = v.pts / (d + 6) * (cfg.pocketBonus && S.ownAt(v.x, v.y) === C.s ? cfg.pocketBonus : 1); if (sc0 > bs) { bs = sc0; best = v; } }   // pocketBonus: an enemy-held objective standing on our ground is a bypassed pocket to reduce
++        if (!best) continue; taken.add(best); picks.push({ C, best, bs, p, kids }); }
++      // doctrine (sc.modules has 'doctrine'): the corps with the best objective makes the main effort on a narrow zone with a reserve;
++      // the others attack on wide zones without one (FM 100-5, 1941, pars. 456-457). Without doctrine every corps attacks alike.
++      const doc = (sc.modules || []).includes('doctrine'), mainC = doc && picks.length > 1 ? picks.reduce((a, q) => q.bs > a.bs ? q : a, picks[0]).C : null;
++      for (const { C, best, p, kids } of picks) { const isMain = C === mainC, fk = (cfg.frontKm || ARMYAI.frontKm) * (doc ? (isMain ? .7 : 1.4) : 1);
++        const dx = best.x - p[0], dy = best.y - p[1], dl = Math.hypot(dx, dy) || 1, ux = dx / dl, uy = dy / dl, half = fk * kids.length / 2, cx = best.x + ux, cy = best.y + uy;
++        S.issueCommandOrder(C, [], [[cx - uy * half, cy + ux * half], [cx + uy * half, cy - ux * half]], doc ? (isMain ? { main: true, reserve: true } : { reserve: false }) : {}); C.aiTgt = best;
++        report(A, C.n + (isMain ? ' to make the main effort toward ' : ' to attack toward ') + best.n + '.', 0); } } }
    // called once per simulation step
    const prevHook = S.cmdHook;
 -  let armyT = -1e9; S.cmdHook = function () { if (prevHook) prevHook(); planTick(); if (S.t - armyT >= 60) { armyT = S.t; armyTick(); } for (const C of nodes) { if (!C.order) continue; if (C.order.st === 'pending' && S.t >= C.order.t0) release(C); else if (C.order.st === 'issued' && S.t >= C.order.nextReview) review(C); } };
@@ -112,3 +149,99 @@
      if (f) { const F = S.forms[+f.dataset.f]; select(F); if (F.active) frameF(F); else if (F.arr && F.arr.mode !== 'road') R.jump(F.x, F.y, 40); return; }
      if (t.dataset.m) { cmd('mission', [+t.dataset.g, t.dataset.m]); } else if (t.dataset.act === 'addrec') setMode(mode === 'rec' ? null : 'rec'); else if (t.dataset.delrec) cmd('delrec', [+t.dataset.delrec]); else if (t.dataset.act === 'addint') setMode(mode === 'int' ? null : 'int'); else if (t.dataset.act === 'addstrat') setMode(mode === 'strat' ? null : 'strat');
      else if (t.dataset.delint) cmd('delint', [+t.dataset.delint]); else if (t.dataset.delstrat) cmd('delstrat', [+t.dataset.delstrat]);
+--- a/engine/src/map.js	2026-11-23 22:24:53.573579233 -0500
++++ b/engine/src/map.js	2026-11-24 00:07:18.271459442 -0500
+@@ -92,14 +92,16 @@
+     for (const q of cells) m.br[q] = b.id; m.bridges.push(b);
+   }
+   for (const o of sc.bridges || []) { let best = null, bd = 2.5; for (const b of m.bridges) { const d = Math.hypot(b.x - o[0], b.y - o[1]); if (d < bd) { bd = d; best = b; } } if (best) Object.assign(best, o[2]); else if (typeof console !== 'undefined') console.warn('bridge override not matched', o); }
++  m.facX = [new Float32Array(N), new Float32Array(N), new Float32Array(N)];
+   m.calcFac = function () {
+     for (let c = 0; c < N; c++) {
+       const t = m.t[c], r = m.road[c];
+       for (let k = 0; k < 3; k++) {
+         let f = t === T.MARSH && sc.mines && m.lane[c] ? TFAC[T.OPEN][k] : TFAC[t][k];   // a lane cleared through a minefield drives like open ground
+         if (t === T.RIVER) { const b = m.br[c] >= 0 ? m.bridges[m.br[c]] : null; f = b && b.intact && (r || b.fl) ? RFAC[r || 2][k] : 0; }   // a floating bridge carries traffic where no road crosses
+-        else if (r) { let rf = RFAC[r][k]; if (t === T.MTN) rf *= .6; else if (t === T.HF || t === T.HILL || t === T.JUNGLE) rf *= .85; f = Math.max(f, rf); }
+-        m.fac[k][c] = f;
++        const fx = f;   // cross-country factor: the terrain alone (doctrine: a developed formation leaves the roads)
++        if (t !== T.RIVER && r) { let rf = RFAC[r][k]; if (t === T.MTN) rf *= .6; else if (t === T.HF || t === T.HILL || t === T.JUNGLE) rf *= .85; f = Math.max(f, rf); }
++        m.fac[k][c] = f; m.facX[k][c] = t === T.RIVER ? f : fx;
+       }
+     }
+   };
+@@ -138,7 +140,7 @@
+   const offRoad = c => !m.road[c] && m.t[c] !== T.DESERT && m.t[c] !== T.TOWN && m.t[c] !== T.CITY && m.t[c] !== T.BEACH && m.t[c] !== T.RIVER;
+   m.pathCount = 0;
+   m.findPath = function (k, sx, sy, gx, gy, opt) {
+-    m.pathCount++; opt = opt || {}; const fac = m.fac[k], block = opt.block, threat = opt.threat, rb = opt.road || 0;   // rb: extra cost on ground with no road (supply columns)
++    m.pathCount++; opt = opt || {}; const fac = (opt.cross ? m.facX : m.fac)[k], block = opt.block, threat = opt.threat, rb = opt.road || 0;   // rb: extra cost on ground with no road (supply columns)
+     const s0 = m.snap(k, sx, sy, 3), g0 = m.snap(k, gx, gy, opt.grad || 4); if (!s0 || !g0) return null;
+     const sc0 = idx(s0[0], s0[1]), gc = idx(g0[0], g0[1]), gi = gc % W, gj = (gc / W) | 0;
+     if (sc0 === gc) return [[g0[0], g0[1]]];
+--- /dev/null
++++ b/engine/src/doctrine.js
+@@ -0,0 +1,63 @@
++// ===== DOCTRINE: how large units deploy and advance along a front =====
++// Field-manual practice for division and corps operations (FM 100-5, 1941, chapters 8 and 9; German practice as reported in
++// US intelligence bulletins), turned into engine rules. A scenario switches it on with modules: ['doctrine'] and may tune DOCTRINE
++// through sc.doctrine. All numbers are starting values for balance testing (game settings).
++//  1. Development: a division within devKm of known enemy, or on ground the enemy holds, leaves the roads and moves across
++//     country in its deployed formation (cross-country movement factors; the road bonus is ignored).
++//  2. Alignment by bounds: in a corps attack, a division that gets more than alignKm ahead of its slowest neighbour halts at
++//     the bound until the flank comes up. Mobile divisions in a main-effort attack are exempt and follow rule 3 instead.
++//  3. Guarded corridors: an armoured or motorised division pushing ahead of the front measures how far back along its
++//     axis its flanks stand on enemy ground. Its own infantry and reconnaissance battalions can guard a length of flank
++//     (guardKmPerBn each, plus guardKm0); past that it halts until the flanks are covered, and its corps sends an infantry
++//     division forward to line the open flank.
++//  4. Main effort: the army commander gives the corps with the best objective a narrow zone and a reserve; the others attack
++//     on wide zones without one (command.js, armyTick).
++const DOCTRINE = { devKm: 15, alignKm: 8, guardKm0: 10, guardKmPerBn: 4, flankOff: 7, sampleKm: 4, tickMin: 30 };
++function attachDoctrine(S) {
++  const sc = S.sc, D = Object.assign({}, DOCTRINE, sc.doctrine || {});
++  const fighting = u => u.active && !u.dead && u.cls !== 'hq' && u.mv !== 'ship';
++  const centre = F => { let x = 0, y = 0, k = 0; for (const u of F.subs) if (fighting(u)) { x += u.x; y += u.y; k++; } return k ? [x / k, y / k] : null; };
++  // a mobile division: most of its leading battalions ride in vehicles (armour, mechanised, or motorised infantry and reconnaissance)
++  const mobile = F => { const L = F.subs.filter(u => fighting(u) && LEADCLS[u.cls]); return L.length && L.filter(u => u.cls === 'arm' || u.cls === 'mech' || u.mv !== 'foot').length / L.length > .6; };
++  S.isMobile = mobile;
++  const guardBns = F => F.subs.filter(u => fighting(u) && (u.cls === 'inf' || u.cls === 'mech' || u.cls === 'rec')).length;
++
++  // 1. development: hourly flag per formation
++  function devTick() {
++    for (const F of S.forms) { if (!F.active || F.dead) { F.dev = false; continue; } const p = centre(F); if (!p) continue;
++      let near = S.ownAt(p[0], p[1]) !== F.s;
++      if (!near) for (const e of S.subs) if (e.s !== F.s && e.active && !e.dead && e.mv !== 'ship' && S.t - e.seenT < 60 && Math.hypot(e.x - p[0], e.y - p[1]) < D.devKm) { near = true; break; }
++      if (near !== !!F.dev) { F.dev = near; for (const u of F.subs) if (u.goal) u.needPath = true; } } }
++
++  // 2 and 3: alignment and corridors, for every command node with an attack under way
++  function frontTick() {
++    for (const F of S.forms) { F.alignHold = null; F.flankHold = null; }
++    for (const C of S.commands || []) {
++      const O = C.order; if (!O || O.st !== 'issued' || !O.plan || C.forms.some(c => c.forms)) continue;   // divisions under a corps only
++      if (O.p0 == null) O.p0 = O.plan.map(q => centre(q.child)).filter(Boolean).reduce((a, p, i, A) => [a[0] + p[0] / A.length, a[1] + p[1] / A.length], [0, 0]);
++      const L = polyLen(O.line), m = polyAt(O.line, L / 2); let ax = m.x - O.p0[0], ay = m.y - O.p0[1]; const al = Math.hypot(ax, ay) || 1; ax /= al; ay /= al; const px = -ay, py = ax;
++      const fwd = O.plan.filter(q => !q.reserve && !q.child.dead && centre(q.child)).map(q => { const p = centre(q.child); return { q, F: q.child, p, prog: (p[0] - O.p0[0]) * ax + (p[1] - O.p0[1]) * ay, lat: (p[0] - O.p0[0]) * px + (p[1] - O.p0[1]) * py }; }).sort((a, b) => b.lat - a.lat);
++      fwd.forEach((o, i) => {
++        const F = o.F, mob = mobile(F), free = mob && (O.opt.main || O.opt.exploit);
++        // 2. alignment with the neighbours to left and right
++        if (!free && fwd.length > 1) { const nb = [fwd[i - 1], fwd[i + 1]].filter(Boolean), lag = nb.reduce((a, n) => n.prog < a.prog ? n : a, nb[0]);
++          if (lag && o.prog - lag.prog > D.alignKm && !F.contact) F.alignHold = 'Halted at the bound, waiting for ' + lag.F.n + ' to come up on the flank'; }
++        // 3. a mobile spearhead's open flanks: sample back along the axis on both sides
++        if (mob) { const cap = D.guardKm0 + D.guardKmPerBn * guardBns(F); let open = [0, 0];
++          for (let s = 0; s < 2; s++) { const sg = s ? -1 : 1; for (let d = 0; d < Math.max(0, o.prog) - 2; d += D.sampleKm) { const x = o.p[0] - ax * d + px * sg * D.flankOff, y = o.p[1] - ay * d + py * sg * D.flankOff; if (x < 0 || y < 0 || x > S.map.w || y > S.map.h) break; if (S.ownAt(x, y) === F.s) break; open[s] = d + D.sampleKm; } }
++          const worst = Math.max(open[0], open[1]);
++          if (worst > cap) { const s = open[0] >= open[1] ? 0 : 1, sg = s ? -1 : 1; F.flankHold = 'Halted: ' + Math.round(worst) + ' km of open flank, more than our ' + guardBns(F) + ' guard battalions can cover; waiting for infantry';
++            // the corps sends an infantry division that is in reserve or finished with its task to line the open flank
++            if (!O.flankSent || S.t - O.flankSent > 240) { const inf = O.plan.map(q => q.child).filter(c => c !== F && !c.dead && !mobile(c) && c.active && (O.plan.find(q => q.child === c).reserve || !c.order || c.order.st === 'done'))
++                .sort((a, b) => { const pa = centre(a), pb = centre(b); return (pa ? Math.hypot(pa[0] - o.p[0], pa[1] - o.p[1]) : 1e9) - (pb ? Math.hypot(pb[0] - o.p[0], pb[1] - o.p[1]) : 1e9); })[0];
++              if (inf) { const dmid = Math.min(worst, o.prog) / 2, cx = o.p[0] - ax * dmid + px * sg * D.flankOff, cy = o.p[1] - ay * dmid + py * sg * D.flankOff, hw = Math.min(10, worst / 2);
++                S.issueOrder(inf, [], [[cx - ax * hw, cy - ay * hw], [cx + ax * hw, cy + ay * hw]], { then: 'dig' }); O.flankSent = S.t;
++                S.say(C.s, C.n + ': ' + inf.n + ' sent forward to cover the open flank of ' + F.n + '.', 1); } } } }
++      });
++    }
++    for (const F of S.forms) { const why = F.flankHold || F.alignHold; if (why && F.status !== why && !F.contact) F.status = why; }
++  }
++  let last = -1e9, lastDev = -1e9;
++  const prev = S.cmdHook; S.cmdHook = function () { if (prev) prev(); if (S.t - lastDev >= 60) { lastDev = S.t; devTick(); } if (S.t - last >= D.tickMin) { last = S.t; frontTick(); } };
++  return S;
++}

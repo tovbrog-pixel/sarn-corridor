@@ -118,7 +118,7 @@ function attachCommand(S) {
   // scheduled corps orders for the side the computer plays (sc.corpsPlan: { t: hours, c: command id, line: [[x, y], [x, y]], path }):
   // the corps commander splits the objective line among his divisions, as when the player orders the whole corps
   const cplan = (sc.corpsPlan || []).slice().sort((a, b) => a.t - b.t); let ci = 0;
-  function corpsPlanTick() { while (ci < cplan.length && cplan[ci].t * 60 <= S.t) { const q = cplan[ci++], C = byId[q.c]; if (!C || C.s === S.player || !live(C)) continue; S.issueCommandOrder(C, q.path || [], q.line, {}); report(C, 'ordered forward on the corps objective.', 0); } }
+  function corpsPlanTick() { while (ci < cplan.length && cplan[ci].t * 60 <= S.t) { const q = cplan[ci++], C = byId[q.c]; if (!C || C.s === S.player || !live(C)) continue; S.issueCommandOrder(C, q.path || [], q.line, q.opt || {}); report(C, 'ordered forward on the corps objective.', 0); } }
   // AI army commanders (sc.armyAI): on the side the computer plays, each army gives its corps objectives in turn. The commander's
   // aggression sets the rhythm: a cautious one (Montgomery's armies) waits longer between attacks and for fuller supply; a bold one
   // (Patton) attacks more often and reaches farther. All values are starting values for balance testing.
@@ -126,17 +126,21 @@ function attachCommand(S) {
   function armyTick() { if (!sc.armyAI) return;
     const cfg = typeof sc.armyAI === 'object' ? sc.armyAI : {};   // { only: [army keys], from: hours } limits the AI armies and when they start; cadenceH, waitH, supply and reachKm replace the values above for a pursuit
     for (const A of nodes) { if (A.level !== 'army' || A.s === S.player || S.t < (A.nextPlan || 0) || (cfg.only && !cfg.only.includes(A.key)) || S.t < (cfg.from || 0) * 60) continue; const ag = A.cmd ? A.cmd.ag : .5, k = Math.max(0, Math.min(1, (ag - .4) / .5));
-      const lerp = a => a[0] + (a[1] - a[0]) * k; A.nextPlan = S.t + 60 * (cfg.cadenceH || lerp(ARMYAI.cadenceH)) * (.85 + S.rnd() * .3); const taken = new Set();
+      const lerp = a => a[0] + (a[1] - a[0]) * k; A.nextPlan = S.t + 60 * (cfg.cadenceH || lerp(ARMYAI.cadenceH)) * (.85 + S.rnd() * .3); const taken = new Set(), picks = [];
       for (const C of A.forms) { if (!C.forms || !live(C)) continue; if (C.order && C.order.st !== 'issued' && C.order.st !== 'done') continue;
         if (C.order && C.order.st === 'issued' && !C.order.doneSaid && S.t - C.order.t0 < (cfg.waitH || 48) * 60) continue;   // a corps attack still under way runs to its end, or 48 hours
         const kids = C.forms.filter(F => !F.forms && F.active && !F.dead); if (!kids.length) continue;
         if (kids.reduce((a, F) => a + F.stock / Math.max(1, F.cap), 0) / kids.length < (cfg.supply || lerp(ARMYAI.supply))) continue;
         const p = pos(C); if (!p) continue; let best = null, bs = -1e9;
         for (const v of S.vp) { if (v.own === C.s || taken.has(v)) continue; const d = Math.hypot(v.x - p[0], v.y - p[1]); if (d > (cfg.reachKm || lerp(ARMYAI.reachKm)) || (S.phaseBlock && S.phaseBlock(kids[0], v.x, v.y))) continue; const sc0 = v.pts / (d + 6) * (cfg.pocketBonus && S.ownAt(v.x, v.y) === C.s ? cfg.pocketBonus : 1); if (sc0 > bs) { bs = sc0; best = v; } }   // pocketBonus: an enemy-held objective standing on our ground is a bypassed pocket to reduce
-        if (!best) continue; taken.add(best);
-        const dx = best.x - p[0], dy = best.y - p[1], dl = Math.hypot(dx, dy) || 1, ux = dx / dl, uy = dy / dl, half = (cfg.frontKm || ARMYAI.frontKm) * kids.length / 2, cx = best.x + ux, cy = best.y + uy;
-        S.issueCommandOrder(C, [], [[cx - uy * half, cy + ux * half], [cx + uy * half, cy - ux * half]], {}); C.aiTgt = best;
-        report(A, C.n + ' to attack toward ' + best.n + '.', 0); } } }
+        if (!best) continue; taken.add(best); picks.push({ C, best, bs, p, kids }); }
+      // doctrine (sc.modules has 'doctrine'): the corps with the best objective makes the main effort on a narrow zone with a reserve;
+      // the others attack on wide zones without one (FM 100-5, 1941, pars. 456-457). Without doctrine every corps attacks alike.
+      const doc = (sc.modules || []).includes('doctrine'), mainC = doc && picks.length > 1 ? picks.reduce((a, q) => q.bs > a.bs ? q : a, picks[0]).C : null;
+      for (const { C, best, p, kids } of picks) { const isMain = C === mainC, fk = (cfg.frontKm || ARMYAI.frontKm) * (doc ? (isMain ? .7 : 1.4) : 1);
+        const dx = best.x - p[0], dy = best.y - p[1], dl = Math.hypot(dx, dy) || 1, ux = dx / dl, uy = dy / dl, half = fk * kids.length / 2, cx = best.x + ux, cy = best.y + uy;
+        S.issueCommandOrder(C, [], [[cx - uy * half, cy + ux * half], [cx + uy * half, cy - ux * half]], doc ? (isMain ? { main: true, reserve: true } : { reserve: false }) : {}); C.aiTgt = best;
+        report(A, C.n + (isMain ? ' to make the main effort toward ' : ' to attack toward ') + best.n + '.', 0); } } }
   // called once per simulation step
   const prevHook = S.cmdHook;
   let armyT = -1e9; S.cmdHook = function () { if (prevHook) prevHook(); planTick(); corpsPlanTick(); if (S.t - armyT >= 60) { armyT = S.t; armyTick(); } for (const C of nodes) { if (!C.order) continue; if (C.order.st === 'pending' && S.t >= C.order.t0) release(C); else if (C.order.st === 'issued' && S.t >= C.order.nextReview) review(C); } };
