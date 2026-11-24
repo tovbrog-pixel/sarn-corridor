@@ -28,6 +28,9 @@ const PLANS = [{ n: 'aggressive', tm: .82, rng: 27, stk: .3 }, { n: 'standard', 
 const THEN = { hold: 'Hold until further orders', dig: 'Dig in', rest: 'Rest and refit', exploit: 'Exploit', delay: 'Delay', reserve: 'Reserve' };
 const LESSON = { dug: 'attacking dug-in troops', night: 'attacking at night', air: 'attacking under enemy aircraft', guns: 'attacking into enemy artillery', armour: 'attacking enemy armour', close: 'attacking in towns and woods', outnum: 'attacking when outnumbered', supply: 'attacking when short of supply', gen: 'attacking at all' };
 function createSim(sc, player, seed, opt) {
+  // deployment variants (sc.variants): one is drawn from the seed when the game starts, so a hidden plan differs from game to game;
+  // a variant replaces the scenario fields it carries (forms, corpsPlan and the like). opt.variant forces one, for tests.
+  if (sc.variants && sc.variants.length) { const vr = mulberry((seed || 20261119) ^ 0x5bd1e995), vi = opt && opt.variant != null ? opt.variant : Math.floor(vr() * sc.variants.length); sc = Object.assign({}, sc, sc.variants[vi], { variantIndex: vi }); }
   opt = opt || {}; const VR = opt.vary == null ? 1 : opt.vary, DF = DIFF[opt.diff == null ? 1 : opt.diff], foe = player < 0 ? -1 : 1 - player, D1 = { xp: 1, sup: 1, react: 1, arr: 1, delay: 1 }, dfS = s => s === foe ? DF : D1;
   const map = buildMap(sc), rnd = mulberry(seed || 20261119), N = map.N;
   // friction: the forecast stays as scripted, the weather that arrives may differ
@@ -511,7 +514,7 @@ function createSim(sc, player, seed, opt) {
       // an enemy in fighting order within 1.2 km blocks the way: close with him, fight through on an assault, or fall back, but do not drive past
       let zf = 1; if (!ret && u.ze && u.pi < u.path.length) { const q = u.path[u.pi], qx = q[0] - u.x, qy = q[1] - u.y, ql = Math.hypot(qx, qy) || 1, rr = sc.sides[u.s].rear || [0, 0], back = (qx * rr[0] + qy * rr[1]) / ql > .3;
         if (!back) { const toward = (qx * (u.ze.x - u.x) + qy * (u.ze.y - u.y)) / ql > .15 * u.zd; if (u.assault) zf = .35; else if (!toward || u.zd < .5) { if (u.ze.seenT < S.t - 6) u.ze.seenT = S.t; continue; } else zf = .5; } }
-      const c = map.idx(u.x, u.y); let sp = zf * baseSpeed(u) * (u.fat > .5 ? 1 - .6 * (u.fat - .5) : 1) * (!ret && !u.det && !u.fm && !INDEP[u.cls] && u.f.pace && !u.f.contact && u.f.order && u.f.order.st === 'active' ? Math.min(1, u.f.pace / baseSpeed(u)) : 1) * Math.max(.05, (u.f.dev && !u.det ? map.facX : map.fac)[u.mvi][c]) * wm * ((u.f.alignHold || u.f.flankHold) && !ret && !u.det && !u.f.contact && u.state !== 'retreat' ? 0 : 1) * (S.t - u.hitT < 3 && !ret ? .5 : 1) * (ret ? 1.15 : 1) * (1 - .5 * u.f.dis);
+      const c = map.idx(u.x, u.y); let sp = zf * baseSpeed(u) * (u.fat > .5 ? 1 - .6 * (u.fat - .5) : 1) * (!ret && !u.det && !u.fm && !INDEP[u.cls] && u.f.pace && !u.f.contact && u.f.order && u.f.order.st === 'active' ? Math.min(1, u.f.pace / baseSpeed(u)) : 1) * Math.max(.05, (u.f.dev && !u.det ? map.facX : map.fac)[u.mvi][c]) * wm * ((u.f.alignHold || u.f.flankHold) && !ret && !u.det && !u.f.contact && u.state !== 'retreat' ? 0 : 1) * (sc.hHour && S.t < sc.hHour * 60 && u.path && u.path[u.pi] && S.ownAt(u.path[u.pi][0], u.path[u.pi][1]) !== u.s ? 0 : 1) * (S.t - u.hitT < 3 && !ret ? .5 : 1) * (ret ? 1.15 : 1) * (1 - .5 * u.f.dis);
       let rem = sp * dt;
       while (rem > 0 && u.pi < u.path.length) {
         const p = u.path[u.pi], dx = p[0] - u.x, dy = p[1] - u.y, d = Math.hypot(dx, dy);
@@ -1199,10 +1202,11 @@ function createSim(sc, player, seed, opt) {
     S.t += dt; S.lastDt = dt; if (S.cmdHook) S.cmdHook(); const h = S.hourOf(S.t); S.night = h < S.dayA || h > S.dayB;
     const wi = Math.min(weather.length - 1, Math.floor(S.t / 720)); if (weather[wi] !== S.wx) { S.wx = weather[wi]; say(-1, 'Weather: ' + WXNAME[S.wx] + (S.wx === 'clear' || S.wx === 'cloud' ? '. Aircraft can fly.' : '. Air operations suspended.'), 1); }
     moveSubs(dt); moveConvoys(dt); moveFlights(dt);
-    if (S.t >= tC) { tC += 1; combatTick(); arrivals(); }
+    const war = !sc.hHour || S.t >= sc.hHour * 60;   // before H-hour (sc.hHour, hours) neither side fires or flies missions
+    if (S.t >= tC) { tC += 1; if (war) combatTick(); arrivals(); }
     for (const F of S.forms) if (S.t >= F.nextT) { F.nextT += 5; cmdTick(F); }
     if (S.t >= tSup) { tSup += 10; supplyTick(); }
-    if (S.t >= tAir) { tAir += 5; airTick(); }
+    if (S.t >= tAir) { tAir += 5; if (war) airTick(); }
     if (S.t >= tBr) { tBr += 5; bridgeTick(); xingTick(); laneTick(); }
     if (Math.floor(S.t / 60) !== Math.floor((S.t - dt) / 60)) S.lossH.push([Math.round(S.t / 60), S.losses[0], S.losses[1]]);   // hourly record for the end-screen timeline
     if (S.t >= tVp) { tVp += 10; vpTick(); ownTick(Math.floor(S.t / 60) !== Math.floor((S.t - 10) / 60)); }
@@ -1270,6 +1274,6 @@ function createSim(sc, player, seed, opt) {
   const own0At = (x, y) => S.own0[clamp(Math.floor(y / OW.cw), 0, OW.gh - 1) * OW.gw + clamp(Math.floor(x / OW.cw), 0, OW.gw - 1)];
   S.setup = function () { S.mkBenches(); arrivals(); aiTick(); for (const F of S.forms) cmdTick(F); combatTick(); initOwn(); if (!sc.front) ownTick(false); S.own0 = OW.a.slice(); 
     // step 3 modules a scenario asks for (the France campaign: road and rail moves, the air war); the older scenarios run without them
-    for (const m of sc.modules || []) { const fn = { transport: typeof attachTransport === 'function' && attachTransport, air: typeof attachAir === 'function' && attachAir, command: typeof attachCommand === 'function' && attachCommand, politics: typeof attachPolitics === 'function' && attachPolitics, theater: typeof attachTheater === 'function' && attachTheater, repl: typeof attachRepl === 'function' && attachRepl, doctrine: typeof attachDoctrine === 'function' && attachDoctrine }[m]; if (fn) fn(S); } };
+    for (const m of sc.modules || []) { const fn = { transport: typeof attachTransport === 'function' && attachTransport, air: typeof attachAir === 'function' && attachAir, command: typeof attachCommand === 'function' && attachCommand, politics: typeof attachPolitics === 'function' && attachPolitics, theater: typeof attachTheater === 'function' && attachTheater, repl: typeof attachRepl === 'function' && attachRepl, doctrine: typeof attachDoctrine === 'function' && attachDoctrine, intel: typeof attachIntel === 'function' && attachIntel }[m]; if (fn) fn(S); } };
   return S;
 }

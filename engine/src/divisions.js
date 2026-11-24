@@ -67,6 +67,11 @@ const DIVTPL = {
     { n: '{c} Motor Rifle Regiment', role: 'man', sub: ['ge_pzgr|I/{c} Motor Rifles', 'ge_pzgr|II/{c} Motor Rifles', 'ge_pzgr|III/{c} Motor Rifles'] },
     { n: 'Panzer Artillery Regiment', role: 'arty', sub: ['ge_art105|I/Panzer Artillery', 'ge_art105|II/Panzer Artillery', 'ge_art150|III/Panzer Artillery'] },
     { n: 'Division troops', role: 'troops', sub: ['ge_krad|Panzer Reconnaissance Bn', 'ge_pak38|Anti-tank Bn', 'ge_pio|Panzer Engineer Bn', 'ge_flak20|Light Flak Bn'] }], attach: [] },
+  vd_mot: { nat: 'GE', regs: [
+    { n: '{a} Motor Rifle Regiment', role: 'man', sub: ['ge_pzgr|I/{a} Motor Rifles', 'ge_pzgr|II/{a} Motor Rifles', 'ge_pzgr|III/{a} Motor Rifles'] },
+    { n: '{b} Motor Rifle Regiment', role: 'man', sub: ['ge_pzgr|I/{b} Motor Rifles', 'ge_pzgr|II/{b} Motor Rifles', 'ge_pzgr|III/{b} Motor Rifles'] },
+    { n: 'Motorized Artillery Regiment', role: 'arty', sub: ['ge_art105|I/Motorized Artillery', 'ge_art105|II/Motorized Artillery', 'ge_art150|III/Motorized Artillery'] },
+    { n: 'Division troops', role: 'troops', sub: ['ge_krad|Motorized Reconnaissance Bn', 'ge_pak38|Anti-tank Bn', 'ge_pio|Motorized Engineer Bn'] }], attach: [] },
   sa_inf: { nat: 'IT', regs: [
     { n: '{a} Infantry Regiment', role: 'man', sub: ['it_inf|I/{a} Infantry', 'it_inf|II/{a} Infantry', 'it_inf|III/{a} Infantry'] },
     { n: '{b} Infantry Regiment', role: 'man', sub: ['it_inf|I/{b} Infantry', 'it_inf|II/{b} Infantry', 'it_inf|III/{b} Infantry'] },

@@ -109,7 +109,7 @@ function attachAir(S) {
   };
   let nextH = 60, nextRebase = A0.rebaseEveryH * 60;
   const prevHook = S.cmdHook;
-  S.cmdHook = function () { if (prevHook) prevHook(); fleetTick(); opsTick(); groundTick();
+  S.cmdHook = function () { if (prevHook) prevHook(); if (S.sc.hHour && S.t < S.sc.hHour * 60) return; fleetTick(); opsTick(); groundTick();
     if (S.t >= nextH) { nextH += 60; fieldsTick(); refitTick(); } if (S.t >= nextRebase) { nextRebase += A0.rebaseEveryH * 60; rebaseTick(); } };
   S.airSites = sites; S.airOps = ops; S.frontRef = frontRef;
   return S;

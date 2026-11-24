@@ -61,3 +61,32 @@ function attachDoctrine(S) {
   const prev = S.cmdHook; S.cmdHook = function () { if (prev) prev(); if (S.t - lastDev >= 60) { lastDev = S.t; devTick(); } if (S.t - last >= D.tickMin) { last = S.t; frontTick(); } };
   return S;
 }
+
+// ===== INTELLIGENCE: the picture each side holds of the enemy's divisions =====
+// At the start (sc.intel), each side knows a share of the enemy divisions on the map: front-line divisions (within frontKm of its
+// own troops) with probability known[s], rear divisions with known[s] * rearMul, each placed with an error of errKm[0] (front) or
+// errKm[1] (rear) and identified by name with probability named[s]. Each hour, an enemy division seen by any unit moves its entry
+// to where it was seen and is identified; between sightings the entry keeps its last known position and age. The renderer draws
+// entries for divisions not currently in view as faded estimated symbols. All values are game settings.
+const INTEL0 = { known: [.8, .6], rearMul: .55, errKm: [4, 14], named: [.6, .4], frontKm: 30 };
+function attachIntel(S) {
+  const sc = S.sc, Q = Object.assign({}, INTEL0, sc.intel || {}), rnd = S.rnd;
+  const fighting = u => u.active && !u.dead && u.cls !== 'hq' && u.mv !== 'ship';
+  const centre = (F, f) => { let x = 0, y = 0, k = 0; for (const u of F.subs) if (fighting(u) && (!f || f(u))) { x += u.x; y += u.y; k++; } return k ? [x / k, y / k] : null; };
+  const label = F => F.n.replace(/ (Infantry |Armou?red |Panzer |Motorized |Rifle |Tank )?Division.*| \(.*/, m => /Panzer|Armou?red|Tank/.test(m) ? ' Armd' : /Motorized/.test(m) ? ' Mot' : '').replace(/^(\d+)(st|nd|rd|th)\b/, '$1');
+  const kind = F => { const L = F.subs.filter(u => fighting(u)); return L.filter(u => u.cls === 'arm').length * 3 >= L.length ? 'arm' : 'inf'; };
+  S.intel = [[], []];
+  for (let s = 0; s < 2; s++) { const mine = S.subs.filter(u => u.s === s && fighting(u));
+    for (const F of S.forms) { if (F.s === s || !F.active || F.dead) continue; const p = centre(F); if (!p) continue;
+      let dn = 1e9; for (const u of mine) { const d = Math.hypot(u.x - p[0], u.y - p[1]); if (d < dn) dn = d; }
+      const front = dn <= Q.frontKm; if (rnd() > Q.known[s] * (front ? 1 : Q.rearMul)) continue;
+      const err = Q.errKm[front ? 0 : 1], a = rnd() * 6.283, r = err * Math.sqrt(rnd()), named = rnd() < Q.named[s];
+      S.intel[s].push({ F, x: Math.max(0, Math.min(S.map.w, p[0] + Math.cos(a) * r)), y: Math.max(0, Math.min(S.map.h, p[1] + Math.sin(a) * r)), t: 0, named, label: named ? label(F) : 'Division', cls: rnd() < .85 ? kind(F) : 'inf', src: 'prewar' }); } }
+  let last = 0;
+  const prev = S.cmdHook; S.cmdHook = function () { if (prev) prev(); if (S.t - last < 60) return; last = S.t;
+    for (let s = 0; s < 2; s++) { const L = S.intel[s];
+      for (let i = L.length - 1; i >= 0; i--) if (L[i].F.dead) L.splice(i, 1);
+      for (const F of S.forms) { if (F.s === s || !F.active || F.dead) continue; const p = centre(F, u => S.t - u.seenT < 60); if (!p) continue;
+        let e = L.find(q => q.F === F); if (!e) { e = { F, src: 'contact' }; L.push(e); } Object.assign(e, { x: p[0], y: p[1], t: S.t, named: true, label: label(F), cls: kind(F) }); } } };
+  return S;
+}

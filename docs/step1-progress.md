@@ -56,3 +56,13 @@ Tov asked for divisions and corps to advance as a line, over open ground near th
 **Run, seed 101, 504 game hours:** Valdenmark took Tarnek, the Vesna crossing, the southern corridor and five villages; Port Vesna and Sarnow held. Losses 36 Valdenmark against 13 Sarn battalion-equivalents, most of Valdenmark's in the last week against dug-in sectors. Korovia took Varnholm. 735 s.
 
 **Finding:** seven Sarn divisions cannot hold 370 km of river at doctrinal frontages (8 to 12 km a division), so Sarn's line shows as separated sectors. A continuous front on this map needs several times the divisions, or a smaller theatre.
+
+## Fronts that match the forces; tension, intelligence and thick and thin lines (24 Nov 2026)
+
+- **Forces sized to the front:** Valdenmark 30 divisions (16 infantry on the frontier, two panzer corps of two panzer and one motorized division each, 4 in Ostval, 4 arriving), Sarn 22 (14 on the Vesna, 4 thin on the Ostval frontier, 4 in reserve), Korovia 8 from day 3 of the war. 948 battalions.
+- **Period of tension:** the game opens 48 hours before H-hour (`sc.hHour`); before it no side fires, flies missions or crosses the frontier, and both can redeploy.
+- **Pre-war intelligence** (module `'intel'`): each side starts knowing most enemy front-line divisions and fewer rear ones, placed with errors and sometimes unidentified, drawn as faded symbols with a question mark; contact updates them, and they keep last known positions with the report's age.
+- **Thick and thin deployments:** Sarn spreads its Vesna divisions by where it expects the attack (corridor, balanced or south); Valdenmark masses its infantry and both panzer corps on its chosen axis. Six variants pair the two, mostly with Valdenmark attacking where Sarn is thin, and the engine draws one from the game seed (`sc.variants`).
+- **France 1944:** the fix document carries fixes 1 to 6 only; these features stay in this game, since the France campaign uses historical deployments.
+
+**Early results (full runs in progress):** variant 0 (Sarn expects the corridor; Valdenmark's main effort south) had Valdenmark holding Tarnek, Sarnow and both corridor objectives by day 9 of the war; variant 5 (Sarn expects the south; main effort north) had Port Vesna and both corridor objectives by day 7.

@@ -4,8 +4,8 @@ on:
   workflow_dispatch:
     inputs:
       hours:
-        description: 'Game hours per run (504 = the full 21 days)'
-        default: '504'
+        description: 'Game hours per run (552 = two days of tension and 21 days of war)'
+        default: '552'
       label:
         description: 'Short label for the summary file'
         default: 'corridor'

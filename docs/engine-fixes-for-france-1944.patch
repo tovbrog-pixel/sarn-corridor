@@ -1,81 +1,3 @@
---- a/engine/src/sim.js	2026-11-23 22:24:53.573579233 -0500
-+++ b/engine/src/sim.js	2026-11-24 00:07:18.272572680 -0500
-@@ -498,7 +498,7 @@
-       // a battalion holding a line faces the enemy side of it once it stops shooting
-       if (!u.goal) { if (u.face && S.t - (u.fireT || -99) > 15) { u.hx = u.face[0]; u.hy = u.face[1]; } continue; }
-       if (u.needPath && S.pb > 0 && S.t - u.pathT > (u.noPath ? 30 : .5)) {
--        S.pb--; u.pathT = S.t; const p = map.findPath(u.mvi, u.x, u.y, u.goal[0], u.goal[1]);
-+        S.pb--; u.pathT = S.t; const p = map.findPath(u.mvi, u.x, u.y, u.goal[0], u.goal[1], u.f.dev && !u.det && u.state !== 'retreat' ? { cross: 1 } : undefined);   // doctrine: a developed formation moves across country
-         // a formation crosses as one body: a route far longer than the direct line (a blown bridge sends everyone round by the next crossing) is refused and reported
-         let far = false; if (p && !u.det && u.state !== 'retreat' && u.slot && u.goal === u.slot) { let L = 0, px = u.x, py = u.y; for (const q of p) { L += Math.hypot(q[0] - px, q[1] - py); px = q[0]; py = q[1]; } const d0 = Math.hypot(u.goal[0] - u.x, u.goal[1] - u.y); if (d0 > 1.2 && L > d0 * 1.9 + (sc.detourKm || 5)) far = true; }
-         if (far) { u.noPath = true; u.path = null; u.detour = S.t; u.needPath = true; }
-@@ -511,7 +511,7 @@
-       // an enemy in fighting order within 1.2 km blocks the way: close with him, fight through on an assault, or fall back, but do not drive past
-       let zf = 1; if (!ret && u.ze && u.pi < u.path.length) { const q = u.path[u.pi], qx = q[0] - u.x, qy = q[1] - u.y, ql = Math.hypot(qx, qy) || 1, rr = sc.sides[u.s].rear || [0, 0], back = (qx * rr[0] + qy * rr[1]) / ql > .3;
-         if (!back) { const toward = (qx * (u.ze.x - u.x) + qy * (u.ze.y - u.y)) / ql > .15 * u.zd; if (u.assault) zf = .35; else if (!toward || u.zd < .5) { if (u.ze.seenT < S.t - 6) u.ze.seenT = S.t; continue; } else zf = .5; } }
--      const c = map.idx(u.x, u.y); let sp = zf * baseSpeed(u) * (u.fat > .5 ? 1 - .6 * (u.fat - .5) : 1) * (!ret && !u.det && !u.fm && !INDEP[u.cls] && u.f.pace && !u.f.contact && u.f.order && u.f.order.st === 'active' ? Math.min(1, u.f.pace / baseSpeed(u)) : 1) * Math.max(.05, map.fac[u.mvi][c]) * wm * (S.t - u.hitT < 3 && !ret ? .5 : 1) * (ret ? 1.15 : 1) * (1 - .5 * u.f.dis);
-+      const c = map.idx(u.x, u.y); let sp = zf * baseSpeed(u) * (u.fat > .5 ? 1 - .6 * (u.fat - .5) : 1) * (!ret && !u.det && !u.fm && !INDEP[u.cls] && u.f.pace && !u.f.contact && u.f.order && u.f.order.st === 'active' ? Math.min(1, u.f.pace / baseSpeed(u)) : 1) * Math.max(.05, (u.f.dev && !u.det ? map.facX : map.fac)[u.mvi][c]) * wm * ((u.f.alignHold || u.f.flankHold) && !ret && !u.det && !u.f.contact && u.state !== 'retreat' ? 0 : 1) * (S.t - u.hitT < 3 && !ret ? .5 : 1) * (ret ? 1.15 : 1) * (1 - .5 * u.f.dis);
-       let rem = sp * dt;
-       while (rem > 0 && u.pi < u.path.length) {
-         const p = u.path[u.pi], dx = p[0] - u.x, dy = p[1] - u.y, d = Math.hypot(dx, dy);
-@@ -1227,10 +1227,13 @@
-   }
-   function ownTick(hourly) {
-     // each cell within reach of troops in fighting order goes to the side whose troops are nearest (artillery reaches 0.8 km, other units 1.5 km)
--    const P = OW.pres, D = OW.dist || (OW.dist = [new Float32Array(OW.a.length), new Float32Array(OW.a.length)]); P[0].fill(0); P[1].fill(0); D[0].fill(9); D[1].fill(9);
--    for (const u of S.subs) if (formed(u)) { const r = u.cls === 'art' ? .8 : 1.5, dd = D[u.s], pp = P[u.s], lead = LEADCLS[u.cls] || u.cls === 'at' || u.cls === 'eng'; disc(u.x, u.y, 1.5, c => { const i = c % OW.gw, j = (c / OW.gw) | 0, d = Math.hypot((i + .5) * OW.cw - u.x, (j + .5) * OW.cw - u.y) + 1.5 - r; if (d < dd[c]) dd[c] = d; if (lead && d < 1.2) pp[c] = 1; }); }
--    for (let c = 0; c < OW.a.length; c++) { const a = D[0][c], b = D[1][c]; if (Math.min(a, b) <= 1.5 && a !== b) OW.a[c] = a < b ? 0 : 1; }
--    if (!hourly) return; const g = OW.gw, h = OW.gh, b = OW.a.slice();
-+    const P = OW.pres, D = OW.dist || (OW.dist = [new Float32Array(OW.a.length), new Float32Array(OW.a.length)]); P[0].fill(0); P[1].fill(0); D[0].fill(99); D[1].fill(99);
-+    const R0 = sc.ownR || 1.5;   // reach of a unit's hold on the ground (km); division-scale scenarios set more (game setting)
-+    for (const u of S.subs) if (formed(u)) { const r = u.cls === 'art' ? R0 * .55 : R0, dd = D[u.s], pp = P[u.s], lead = LEADCLS[u.cls] || u.cls === 'at' || u.cls === 'eng'; disc(u.x, u.y, R0, c => { const i = c % OW.gw, j = (c / OW.gw) | 0, d = Math.hypot((i + .5) * OW.cw - u.x, (j + .5) * OW.cw - u.y) + R0 - r; if (d < dd[c]) dd[c] = d; if (lead && d < 1.2) pp[c] = 1; }); }
-+    for (let c = 0; c < OW.a.length; c++) { const a = D[0][c], b = D[1][c]; if (Math.min(a, b) <= R0 && a !== b && !(OW.sea && OW.sea[c])) OW.a[c] = a < b ? 0 : 1; }
-+    if (!hourly) return; const g = OW.gw, h = OW.gh;
-+    if (sc.ownMax) frontTick(g, h);
-+    const b = OW.a.slice();
-     for (let j = 1; j < h - 1; j++) for (let i = 1; i < g - 1; i++) { const c = j * g + i; if (P[0][c] || P[1][c]) continue; let n = 0; for (let dj = -1; dj <= 1; dj++) for (let di = -1; di <= 1; di++) if ((di || dj) && b[c + dj * g + di] !== b[c]) n++; if (n >= 6) OW.a[c] = 1 - b[c]; }
-     // empty pockets close in: a connected region of one side's ground that holds none of its troops and none of its supply sources
-     // gives up its outer ring of cells to the other side each hour, until the surrounding side owns all of it
-@@ -1238,14 +1241,35 @@
-     const cellOf = (x, y) => clamp(Math.floor(y / OW.cw), 0, h - 1) * g + clamp(Math.floor(x / OW.cw), 0, g - 1);
-     for (const u of S.subs) if (u.active && !u.dead) { const c = cellOf(u.x, u.y); if (OW.a[c] === u.s) has[c] = 1; }
-     for (let sd = 0; sd < 2; sd++) for (const so of S.src[sd]) if (!so.captured) { const c = cellOf(so.x, so.y); if (OW.a[c] === sd) has[c] = 1; }
--    let nl = 0; for (let c0 = 0; c0 < N; c0++) { if (lab[c0]) continue; const sd = OW.a[c0]; let qh = 0, qt = 0, k = false; lab[c0] = ++nl; q[qt++] = c0;
--      while (qh < qt) { const c = q[qh++], i = c % g; if (has[c]) k = true; if (i > 0 && !lab[c - 1] && OW.a[c - 1] === sd) { lab[c - 1] = nl; q[qt++] = c - 1; } if (i < g - 1 && !lab[c + 1] && OW.a[c + 1] === sd) { lab[c + 1] = nl; q[qt++] = c + 1; } if (c >= g && !lab[c - g] && OW.a[c - g] === sd) { lab[c - g] = nl; q[qt++] = c - g; } if (c < N - g && !lab[c + g] && OW.a[c + g] === sd) { lab[c + g] = nl; q[qt++] = c + g; } }
-+    // sea cells belong to no pocket: they would otherwise join every coastal pocket to the rest of that side's ground
-+    const SEA = OW.sea || (OW.sea = (() => { const z = new Uint8Array(N); for (let c = 0; c < N; c++) { const x = (c % g + .5) * OW.cw, y = (((c / g) | 0) + .5) * OW.cw; z[c] = map.t[Math.min(map.H - 1, Math.floor(y / map.cs)) * map.W + Math.min(map.W - 1, Math.floor(x / map.cs))] === T.SEA ? 1 : 0; } return z; })());
-+    const same = (c, sd) => OW.a[c] === sd && !SEA[c];
-+    let nl = 0; for (let c0 = 0; c0 < N; c0++) { if (lab[c0]) continue; const sd = OW.a[c0]; let qh = 0, qt = 0, k = !!SEA[c0]; lab[c0] = ++nl; q[qt++] = c0;
-+      if (!SEA[c0]) while (qh < qt) { const c = q[qh++], i = c % g; if (has[c]) k = true; if (i > 0 && !lab[c - 1] && same(c - 1, sd)) { lab[c - 1] = nl; q[qt++] = c - 1; } if (i < g - 1 && !lab[c + 1] && same(c + 1, sd)) { lab[c + 1] = nl; q[qt++] = c + 1; } if (c >= g && !lab[c - g] && same(c - g, sd)) { lab[c - g] = nl; q[qt++] = c - g; } if (c < N - g && !lab[c + g] && same(c + g, sd)) { lab[c + g] = nl; q[qt++] = c + g; } }
-       keep.push(k); }
--    const b2 = OW.a.slice(); for (let c = 0; c < N; c++) { if (keep[lab[c]]) continue; const i = c % g, sd = b2[c]; if ((i > 0 && b2[c - 1] !== sd) || (i < g - 1 && b2[c + 1] !== sd) || (c >= g && b2[c - g] !== sd) || (c < N - g && b2[c + g] !== sd)) OW.a[c] = 1 - sd; }
-+    const b2 = OW.a.slice(), edge = c => !SEA[c] && b2[c] !== b2[c0x]; let c0x = 0; for (let c = 0; c < N; c++) { if (keep[lab[c]]) continue; const i = c % g; c0x = c; if ((i > 0 && edge(c - 1)) || (i < g - 1 && edge(c + 1)) || (c >= g && edge(c - g)) || (c < N - g && edge(c + g))) OW.a[c] = 1 - b2[c]; }
-+  }
-+  // front-line ground model (scenarios that set ownMax, in km): each hour every land cell within ownMax of formed troops goes to the
-+  // side whose troops are nearer, measured over land, so the line between two armies lies halfway between them and ground behind an
-+  // advance changes hands with it. Cells beyond ownMax of everyone keep their owner. Game setting for division-scale scenarios.
-+  function frontTick(g, h) {
-+    const N = g * h, cw = OW.cw, SEA = OW.sea || (OW.sea = (() => { const z = new Uint8Array(N); for (let c = 0; c < N; c++) { const x = (c % g + .5) * cw, y = (((c / g) | 0) + .5) * cw; z[c] = map.t[Math.min(map.H - 1, Math.floor(y / map.cs)) * map.W + Math.min(map.W - 1, Math.floor(x / map.cs))] === T.SEA ? 1 : 0; } return z; })());
-+    const D = OW.fd || (OW.fd = [new Float32Array(N), new Float32Array(N)]), d1 = cw, d2 = cw * Math.SQRT2, cell = (x, y) => clamp(Math.floor(y / cw), 0, h - 1) * g + clamp(Math.floor(x / cw), 0, g - 1);
-+    for (let s = 0; s < 2; s++) { const d = D[s]; d.fill(1e9);
-+      // a cut-off formation's hold weakens as its supply and strength run down: its troops count as farther away, so the encircling
-+      // side takes the pocket's outer ground hour by hour while the defenders keep the ground they stand on (isoShrinkKm, game setting)
-+      const K = sc.isoShrinkKm || 0;
-+      for (const u of S.subs) if (u.s === s && u.active && !u.dead && u.mv !== 'ship' && u.coh > .2 && u.cls !== 'hq') { const F = u.f, off = K && F && F.isolated ? K * (1 - Math.min(1, F.stock / Math.max(1, F.cap))) * .7 + K * (1 - Math.min(1, u.str)) * .3 : 0, c = cell(u.x, u.y); if (off < d[c]) d[c] = off; }
-+      // two-pass chamfer distance; sea cells pass nothing on
-+      for (let j = 0; j < h; j++) for (let i = 0; i < g; i++) { const c = j * g + i; if (SEA[c]) continue; let v = d[c];
-+        if (i > 0 && d[c - 1] + d1 < v) v = d[c - 1] + d1; if (j > 0) { if (d[c - g] + d1 < v) v = d[c - g] + d1; if (i > 0 && d[c - g - 1] + d2 < v) v = d[c - g - 1] + d2; if (i < g - 1 && d[c - g + 1] + d2 < v) v = d[c - g + 1] + d2; } d[c] = v; }
-+      for (let j = h - 1; j >= 0; j--) for (let i = g - 1; i >= 0; i--) { const c = j * g + i; if (SEA[c]) continue; let v = d[c];
-+        if (i < g - 1 && d[c + 1] + d1 < v) v = d[c + 1] + d1; if (j < h - 1) { if (d[c + g] + d1 < v) v = d[c + g] + d1; if (i < g - 1 && d[c + g + 1] + d2 < v) v = d[c + g + 1] + d2; if (i > 0 && d[c + g - 1] + d2 < v) v = d[c + g - 1] + d2; } d[c] = v; } }
-+    const M = sc.ownMax; for (let c = 0; c < N; c++) { if (SEA[c]) continue; const a = D[0][c], b = D[1][c]; if (Math.min(a, b) > M || Math.abs(a - b) < .5) continue; OW.a[c] = a < b ? 0 : 1; }
-   }
-   const own0At = (x, y) => S.own0[clamp(Math.floor(y / OW.cw), 0, OW.gh - 1) * OW.gw + clamp(Math.floor(x / OW.cw), 0, OW.gw - 1)];
-   S.setup = function () { S.mkBenches(); arrivals(); aiTick(); for (const F of S.forms) cmdTick(F); combatTick(); initOwn(); if (!sc.front) ownTick(false); S.own0 = OW.a.slice(); 
-     // step 3 modules a scenario asks for (the France campaign: road and rail moves, the air war); the older scenarios run without them
--    for (const m of sc.modules || []) { const fn = { transport: typeof attachTransport === 'function' && attachTransport, air: typeof attachAir === 'function' && attachAir, command: typeof attachCommand === 'function' && attachCommand, politics: typeof attachPolitics === 'function' && attachPolitics, theater: typeof attachTheater === 'function' && attachTheater, repl: typeof attachRepl === 'function' && attachRepl }[m]; if (fn) fn(S); } };
-+    for (const m of sc.modules || []) { const fn = { transport: typeof attachTransport === 'function' && attachTransport, air: typeof attachAir === 'function' && attachAir, command: typeof attachCommand === 'function' && attachCommand, politics: typeof attachPolitics === 'function' && attachPolitics, theater: typeof attachTheater === 'function' && attachTheater, repl: typeof attachRepl === 'function' && attachRepl, doctrine: typeof attachDoctrine === 'function' && attachDoctrine }[m]; if (fn) fn(S); } };
-   return S;
- }
 --- a/engine/src/command.js	2026-11-23 22:24:53.573579233 -0500
 +++ b/engine/src/command.js	2026-11-24 00:07:18.272873867 -0500
 @@ -115,6 +115,10 @@
@@ -179,9 +101,87 @@
      const s0 = m.snap(k, sx, sy, 3), g0 = m.snap(k, gx, gy, opt.grad || 4); if (!s0 || !g0) return null;
      const sc0 = idx(s0[0], s0[1]), gc = idx(g0[0], g0[1]), gi = gc % W, gj = (gc / W) | 0;
      if (sc0 === gc) return [[g0[0], g0[1]]];
+--- a/engine/src/sim.js	2026-11-23 22:24:53.573579233 -0500
++++ b/engine/src/sim.js	2026-11-24 00:46:50.464796795 -0500
+@@ -498,7 +498,7 @@
+       // a battalion holding a line faces the enemy side of it once it stops shooting
+       if (!u.goal) { if (u.face && S.t - (u.fireT || -99) > 15) { u.hx = u.face[0]; u.hy = u.face[1]; } continue; }
+       if (u.needPath && S.pb > 0 && S.t - u.pathT > (u.noPath ? 30 : .5)) {
+-        S.pb--; u.pathT = S.t; const p = map.findPath(u.mvi, u.x, u.y, u.goal[0], u.goal[1]);
++        S.pb--; u.pathT = S.t; const p = map.findPath(u.mvi, u.x, u.y, u.goal[0], u.goal[1], u.f.dev && !u.det && u.state !== 'retreat' ? { cross: 1 } : undefined);   // doctrine: a developed formation moves across country
+         // a formation crosses as one body: a route far longer than the direct line (a blown bridge sends everyone round by the next crossing) is refused and reported
+         let far = false; if (p && !u.det && u.state !== 'retreat' && u.slot && u.goal === u.slot) { let L = 0, px = u.x, py = u.y; for (const q of p) { L += Math.hypot(q[0] - px, q[1] - py); px = q[0]; py = q[1]; } const d0 = Math.hypot(u.goal[0] - u.x, u.goal[1] - u.y); if (d0 > 1.2 && L > d0 * 1.9 + (sc.detourKm || 5)) far = true; }
+         if (far) { u.noPath = true; u.path = null; u.detour = S.t; u.needPath = true; }
+@@ -511,7 +511,7 @@
+       // an enemy in fighting order within 1.2 km blocks the way: close with him, fight through on an assault, or fall back, but do not drive past
+       let zf = 1; if (!ret && u.ze && u.pi < u.path.length) { const q = u.path[u.pi], qx = q[0] - u.x, qy = q[1] - u.y, ql = Math.hypot(qx, qy) || 1, rr = sc.sides[u.s].rear || [0, 0], back = (qx * rr[0] + qy * rr[1]) / ql > .3;
+         if (!back) { const toward = (qx * (u.ze.x - u.x) + qy * (u.ze.y - u.y)) / ql > .15 * u.zd; if (u.assault) zf = .35; else if (!toward || u.zd < .5) { if (u.ze.seenT < S.t - 6) u.ze.seenT = S.t; continue; } else zf = .5; } }
+-      const c = map.idx(u.x, u.y); let sp = zf * baseSpeed(u) * (u.fat > .5 ? 1 - .6 * (u.fat - .5) : 1) * (!ret && !u.det && !u.fm && !INDEP[u.cls] && u.f.pace && !u.f.contact && u.f.order && u.f.order.st === 'active' ? Math.min(1, u.f.pace / baseSpeed(u)) : 1) * Math.max(.05, map.fac[u.mvi][c]) * wm * (S.t - u.hitT < 3 && !ret ? .5 : 1) * (ret ? 1.15 : 1) * (1 - .5 * u.f.dis);
++      const c = map.idx(u.x, u.y); let sp = zf * baseSpeed(u) * (u.fat > .5 ? 1 - .6 * (u.fat - .5) : 1) * (!ret && !u.det && !u.fm && !INDEP[u.cls] && u.f.pace && !u.f.contact && u.f.order && u.f.order.st === 'active' ? Math.min(1, u.f.pace / baseSpeed(u)) : 1) * Math.max(.05, (u.f.dev && !u.det ? map.facX : map.fac)[u.mvi][c]) * wm * ((u.f.alignHold || u.f.flankHold) && !ret && !u.det && !u.f.contact && u.state !== 'retreat' ? 0 : 1) * (S.t - u.hitT < 3 && !ret ? .5 : 1) * (ret ? 1.15 : 1) * (1 - .5 * u.f.dis);
+       let rem = sp * dt;
+       while (rem > 0 && u.pi < u.path.length) {
+         const p = u.path[u.pi], dx = p[0] - u.x, dy = p[1] - u.y, d = Math.hypot(dx, dy);
+@@ -1227,10 +1227,13 @@
+   }
+   function ownTick(hourly) {
+     // each cell within reach of troops in fighting order goes to the side whose troops are nearest (artillery reaches 0.8 km, other units 1.5 km)
+-    const P = OW.pres, D = OW.dist || (OW.dist = [new Float32Array(OW.a.length), new Float32Array(OW.a.length)]); P[0].fill(0); P[1].fill(0); D[0].fill(9); D[1].fill(9);
+-    for (const u of S.subs) if (formed(u)) { const r = u.cls === 'art' ? .8 : 1.5, dd = D[u.s], pp = P[u.s], lead = LEADCLS[u.cls] || u.cls === 'at' || u.cls === 'eng'; disc(u.x, u.y, 1.5, c => { const i = c % OW.gw, j = (c / OW.gw) | 0, d = Math.hypot((i + .5) * OW.cw - u.x, (j + .5) * OW.cw - u.y) + 1.5 - r; if (d < dd[c]) dd[c] = d; if (lead && d < 1.2) pp[c] = 1; }); }
+-    for (let c = 0; c < OW.a.length; c++) { const a = D[0][c], b = D[1][c]; if (Math.min(a, b) <= 1.5 && a !== b) OW.a[c] = a < b ? 0 : 1; }
+-    if (!hourly) return; const g = OW.gw, h = OW.gh, b = OW.a.slice();
++    const P = OW.pres, D = OW.dist || (OW.dist = [new Float32Array(OW.a.length), new Float32Array(OW.a.length)]); P[0].fill(0); P[1].fill(0); D[0].fill(99); D[1].fill(99);
++    const R0 = sc.ownR || 1.5;   // reach of a unit's hold on the ground (km); division-scale scenarios set more (game setting)
++    for (const u of S.subs) if (formed(u)) { const r = u.cls === 'art' ? R0 * .55 : R0, dd = D[u.s], pp = P[u.s], lead = LEADCLS[u.cls] || u.cls === 'at' || u.cls === 'eng'; disc(u.x, u.y, R0, c => { const i = c % OW.gw, j = (c / OW.gw) | 0, d = Math.hypot((i + .5) * OW.cw - u.x, (j + .5) * OW.cw - u.y) + R0 - r; if (d < dd[c]) dd[c] = d; if (lead && d < 1.2) pp[c] = 1; }); }
++    for (let c = 0; c < OW.a.length; c++) { const a = D[0][c], b = D[1][c]; if (Math.min(a, b) <= R0 && a !== b && !(OW.sea && OW.sea[c])) OW.a[c] = a < b ? 0 : 1; }
++    if (!hourly) return; const g = OW.gw, h = OW.gh;
++    if (sc.ownMax) frontTick(g, h);
++    const b = OW.a.slice();
+     for (let j = 1; j < h - 1; j++) for (let i = 1; i < g - 1; i++) { const c = j * g + i; if (P[0][c] || P[1][c]) continue; let n = 0; for (let dj = -1; dj <= 1; dj++) for (let di = -1; di <= 1; di++) if ((di || dj) && b[c + dj * g + di] !== b[c]) n++; if (n >= 6) OW.a[c] = 1 - b[c]; }
+     // empty pockets close in: a connected region of one side's ground that holds none of its troops and none of its supply sources
+     // gives up its outer ring of cells to the other side each hour, until the surrounding side owns all of it
+@@ -1238,14 +1241,35 @@
+     const cellOf = (x, y) => clamp(Math.floor(y / OW.cw), 0, h - 1) * g + clamp(Math.floor(x / OW.cw), 0, g - 1);
+     for (const u of S.subs) if (u.active && !u.dead) { const c = cellOf(u.x, u.y); if (OW.a[c] === u.s) has[c] = 1; }
+     for (let sd = 0; sd < 2; sd++) for (const so of S.src[sd]) if (!so.captured) { const c = cellOf(so.x, so.y); if (OW.a[c] === sd) has[c] = 1; }
+-    let nl = 0; for (let c0 = 0; c0 < N; c0++) { if (lab[c0]) continue; const sd = OW.a[c0]; let qh = 0, qt = 0, k = false; lab[c0] = ++nl; q[qt++] = c0;
+-      while (qh < qt) { const c = q[qh++], i = c % g; if (has[c]) k = true; if (i > 0 && !lab[c - 1] && OW.a[c - 1] === sd) { lab[c - 1] = nl; q[qt++] = c - 1; } if (i < g - 1 && !lab[c + 1] && OW.a[c + 1] === sd) { lab[c + 1] = nl; q[qt++] = c + 1; } if (c >= g && !lab[c - g] && OW.a[c - g] === sd) { lab[c - g] = nl; q[qt++] = c - g; } if (c < N - g && !lab[c + g] && OW.a[c + g] === sd) { lab[c + g] = nl; q[qt++] = c + g; } }
++    // sea cells belong to no pocket: they would otherwise join every coastal pocket to the rest of that side's ground
++    const SEA = OW.sea || (OW.sea = (() => { const z = new Uint8Array(N); for (let c = 0; c < N; c++) { const x = (c % g + .5) * OW.cw, y = (((c / g) | 0) + .5) * OW.cw; z[c] = map.t[Math.min(map.H - 1, Math.floor(y / map.cs)) * map.W + Math.min(map.W - 1, Math.floor(x / map.cs))] === T.SEA ? 1 : 0; } return z; })());
++    const same = (c, sd) => OW.a[c] === sd && !SEA[c];
++    let nl = 0; for (let c0 = 0; c0 < N; c0++) { if (lab[c0]) continue; const sd = OW.a[c0]; let qh = 0, qt = 0, k = !!SEA[c0]; lab[c0] = ++nl; q[qt++] = c0;
++      if (!SEA[c0]) while (qh < qt) { const c = q[qh++], i = c % g; if (has[c]) k = true; if (i > 0 && !lab[c - 1] && same(c - 1, sd)) { lab[c - 1] = nl; q[qt++] = c - 1; } if (i < g - 1 && !lab[c + 1] && same(c + 1, sd)) { lab[c + 1] = nl; q[qt++] = c + 1; } if (c >= g && !lab[c - g] && same(c - g, sd)) { lab[c - g] = nl; q[qt++] = c - g; } if (c < N - g && !lab[c + g] && same(c + g, sd)) { lab[c + g] = nl; q[qt++] = c + g; } }
+       keep.push(k); }
+-    const b2 = OW.a.slice(); for (let c = 0; c < N; c++) { if (keep[lab[c]]) continue; const i = c % g, sd = b2[c]; if ((i > 0 && b2[c - 1] !== sd) || (i < g - 1 && b2[c + 1] !== sd) || (c >= g && b2[c - g] !== sd) || (c < N - g && b2[c + g] !== sd)) OW.a[c] = 1 - sd; }
++    const b2 = OW.a.slice(), edge = c => !SEA[c] && b2[c] !== b2[c0x]; let c0x = 0; for (let c = 0; c < N; c++) { if (keep[lab[c]]) continue; const i = c % g; c0x = c; if ((i > 0 && edge(c - 1)) || (i < g - 1 && edge(c + 1)) || (c >= g && edge(c - g)) || (c < N - g && edge(c + g))) OW.a[c] = 1 - b2[c]; }
++  }
++  // front-line ground model (scenarios that set ownMax, in km): each hour every land cell within ownMax of formed troops goes to the
++  // side whose troops are nearer, measured over land, so the line between two armies lies halfway between them and ground behind an
++  // advance changes hands with it. Cells beyond ownMax of everyone keep their owner. Game setting for division-scale scenarios.
++  function frontTick(g, h) {
++    const N = g * h, cw = OW.cw, SEA = OW.sea || (OW.sea = (() => { const z = new Uint8Array(N); for (let c = 0; c < N; c++) { const x = (c % g + .5) * cw, y = (((c / g) | 0) + .5) * cw; z[c] = map.t[Math.min(map.H - 1, Math.floor(y / map.cs)) * map.W + Math.min(map.W - 1, Math.floor(x / map.cs))] === T.SEA ? 1 : 0; } return z; })());
++    const D = OW.fd || (OW.fd = [new Float32Array(N), new Float32Array(N)]), d1 = cw, d2 = cw * Math.SQRT2, cell = (x, y) => clamp(Math.floor(y / cw), 0, h - 1) * g + clamp(Math.floor(x / cw), 0, g - 1);
++    for (let s = 0; s < 2; s++) { const d = D[s]; d.fill(1e9);
++      // a cut-off formation's hold weakens as its supply and strength run down: its troops count as farther away, so the encircling
++      // side takes the pocket's outer ground hour by hour while the defenders keep the ground they stand on (isoShrinkKm, game setting)
++      const K = sc.isoShrinkKm || 0;
++      for (const u of S.subs) if (u.s === s && u.active && !u.dead && u.mv !== 'ship' && u.coh > .2 && u.cls !== 'hq') { const F = u.f, off = K && F && F.isolated ? K * (1 - Math.min(1, F.stock / Math.max(1, F.cap))) * .7 + K * (1 - Math.min(1, u.str)) * .3 : 0, c = cell(u.x, u.y); if (off < d[c]) d[c] = off; }
++      // two-pass chamfer distance; sea cells pass nothing on
++      for (let j = 0; j < h; j++) for (let i = 0; i < g; i++) { const c = j * g + i; if (SEA[c]) continue; let v = d[c];
++        if (i > 0 && d[c - 1] + d1 < v) v = d[c - 1] + d1; if (j > 0) { if (d[c - g] + d1 < v) v = d[c - g] + d1; if (i > 0 && d[c - g - 1] + d2 < v) v = d[c - g - 1] + d2; if (i < g - 1 && d[c - g + 1] + d2 < v) v = d[c - g + 1] + d2; } d[c] = v; }
++      for (let j = h - 1; j >= 0; j--) for (let i = g - 1; i >= 0; i--) { const c = j * g + i; if (SEA[c]) continue; let v = d[c];
++        if (i < g - 1 && d[c + 1] + d1 < v) v = d[c + 1] + d1; if (j < h - 1) { if (d[c + g] + d1 < v) v = d[c + g] + d1; if (i < g - 1 && d[c + g + 1] + d2 < v) v = d[c + g + 1] + d2; if (i > 0 && d[c + g - 1] + d2 < v) v = d[c + g - 1] + d2; } d[c] = v; } }
++    const M = sc.ownMax; for (let c = 0; c < N; c++) { if (SEA[c]) continue; const a = D[0][c], b = D[1][c]; if (Math.min(a, b) > M || Math.abs(a - b) < .5) continue; OW.a[c] = a < b ? 0 : 1; }
+   }
+   const own0At = (x, y) => S.own0[clamp(Math.floor(y / OW.cw), 0, OW.gh - 1) * OW.gw + clamp(Math.floor(x / OW.cw), 0, OW.gw - 1)];
+   S.setup = function () { S.mkBenches(); arrivals(); aiTick(); for (const F of S.forms) cmdTick(F); combatTick(); initOwn(); if (!sc.front) ownTick(false); S.own0 = OW.a.slice(); 
+     // step 3 modules a scenario asks for (the France campaign: road and rail moves, the air war); the older scenarios run without them
+-    for (const m of sc.modules || []) { const fn = { transport: typeof attachTransport === 'function' && attachTransport, air: typeof attachAir === 'function' && attachAir, command: typeof attachCommand === 'function' && attachCommand, politics: typeof attachPolitics === 'function' && attachPolitics, theater: typeof attachTheater === 'function' && attachTheater, repl: typeof attachRepl === 'function' && attachRepl }[m]; if (fn) fn(S); } };
++    for (const m of sc.modules || []) { const fn = { transport: typeof attachTransport === 'function' && attachTransport, air: typeof attachAir === 'function' && attachAir, command: typeof attachCommand === 'function' && attachCommand, politics: typeof attachPolitics === 'function' && attachPolitics, theater: typeof attachTheater === 'function' && attachTheater, repl: typeof attachRepl === 'function' && attachRepl, doctrine: typeof attachDoctrine === 'function' && attachDoctrine }[m]; if (fn) fn(S); } };
+   return S;
+ }
 --- /dev/null
 +++ b/engine/src/doctrine.js
-@@ -0,0 +1,63 @@
+@@ -0,0 +1,64 @@
 +// ===== DOCTRINE: how large units deploy and advance along a front =====
 +// Field-manual practice for division and corps operations (FM 100-5, 1941, chapters 8 and 9; German practice as reported in
 +// US intelligence bulletins), turned into engine rules. A scenario switches it on with modules: ['doctrine'] and may tune DOCTRINE
@@ -245,3 +245,4 @@
 +  const prev = S.cmdHook; S.cmdHook = function () { if (prev) prev(); if (S.t - lastDev >= 60) { lastDev = S.t; devTick(); } if (S.t - last >= D.tickMin) { last = S.t; frontTick(); } };
 +  return S;
 +}
++
