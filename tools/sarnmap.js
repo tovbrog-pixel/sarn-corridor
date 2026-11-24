@@ -3,13 +3,13 @@
 // Usage: const sarnMap = require('./sarnmap'); Object.assign(sc, sarnMap({ x0: 180, y0: 0, w: 820, h: 420 }));
 const fs = require('fs'), path = require('path'), zlib = require('zlib');
 const ROOT = path.join(__dirname, '..', 'data');
-let G = null;
-function load() {
-  if (G) return G;
-  const d = path.join(ROOT, 'terrain'), grid = JSON.parse(fs.readFileSync(path.join(d, 'grid.json'), 'utf8'));
+// map sets: 'continent' (data/terrain, data/map.json, from tools/mapgen/gen.py) and 'testbed' (data/testbed, from tools/mapgen/testbed.py)
+const SETS = { continent: ROOT, testbed: path.join(ROOT, 'testbed') }, G = {};
+function load(set) {
+  set = set || 'continent'; if (G[set]) return G[set]; const base = SETS[set]; if (!base) throw new Error('unknown map set ' + set);
+  const d = path.join(base, 'terrain'), grid = JSON.parse(fs.readFileSync(path.join(d, 'grid.json'), 'utf8'));
   const rd = (f, C) => { const b = zlib.gunzipSync(fs.readFileSync(path.join(d, f))); return new C(b.buffer, b.byteOffset, b.byteLength / C.BYTES_PER_ELEMENT); };
-  G = { grid, t: rd('terrain.u8.gz', Uint8Array), el: rd('elev.i16.gz', Int16Array), map: JSON.parse(fs.readFileSync(path.join(ROOT, 'map.json'), 'utf8')) };
-  return G;
+  return (G[set] = { grid, t: rd('terrain.u8.gz', Uint8Array), el: rd('elev.i16.gz', Int16Array), map: JSON.parse(fs.readFileSync(path.join(base, 'map.json'), 'utf8')) });
 }
 function clipLine(pts, x0, y0, w, h) {
   const out = []; let cur = []; const inside = p => p[0] >= x0 && p[0] <= x0 + w && p[1] >= y0 && p[1] <= y0 + h;
@@ -24,7 +24,7 @@ function besideRail(pts) { return pts.map((p, i) => { const a = pts[Math.max(0, 
 // built-up radius by town size (km), Sarn Corridor's own: capitals about 6 km across, size-2 cities about 3.5 km, size-1 towns about 2 km (game settings, Tov 24 Nov 2026)
 const TOWN_R = { 1: 1.0, 2: 1.75, 3: 3.0 };
 function sarnMap(o) {
-  const g = load(), GW = g.grid.w, GH = g.grid.h, M = g.map;
+  const g = load(o.set), GW = g.grid.w, GH = g.grid.h, M = g.map;
   const x0 = o.x0 || 0, y0 = o.y0 || 0, w = o.w || GW - x0, h = o.h || GH - y0, cs = o.cs || 1;
   const W = Math.round(w / cs), H = Math.round(h / cs), t = new Uint8Array(W * H), el = new Float32Array(W * H);
   for (let j = 0; j < H; j++) for (let i = 0; i < W; i++) { const gi = Math.min(GW - 1, Math.floor(x0 + (i + .5) * cs)), gj = Math.min(GH - 1, Math.floor(y0 + (j + .5) * cs)), q = gj * GW + gi;
@@ -43,8 +43,8 @@ function sarnMap(o) {
   return out;
 }
 sarnMap.load = load;
-sarnMap.nation = id => load().map.nations.find(n => n.id === id);
-sarnMap.city = n => load().map.cities.find(c => c.name === n);
+sarnMap.nation = (id, set) => load(set).map.nations.find(n => n.id === id);
+sarnMap.city = (n, set) => load(set).map.cities.find(c => c.name === n);
 module.exports = sarnMap;
 if (require.main === module) { const m = sarnMap({ x0: 180, y0: 0, w: 820, h: 420 }), hist = {}; for (const v of m.raster.t) hist[v] = (hist[v] || 0) + 1;
   console.log(m.w + ' x ' + m.h + ' km; terrain ' + JSON.stringify(hist) + '; rivers ' + m.rivers.length + ', roads ' + m.roads.length + ', rail ' + m.rails.length + ', towns ' + m.towns.length); }
