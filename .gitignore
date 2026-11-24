@@ -1,0 +1,10 @@
+node_modules/
+engine/dist/
+*.cpuprofile
+app/engine/
+app/vendor/
+src-tauri/target/
+src-tauri/gen/
+src-tauri/icons/
+app/index.html
+tools/mapgen/out/

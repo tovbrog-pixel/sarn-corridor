@@ -1,0 +1,51 @@
+name: AI-vs-AI batch
+
+on:
+  workflow_dispatch:
+    inputs:
+      hours:
+        description: 'Game hours per run (2064 = to 1 September 1944)'
+        default: '2064'
+      label:
+        description: 'Short label for the summary file'
+        default: 'overlord'
+
+permissions:
+  contents: write
+
+jobs:
+  run:
+    runs-on: ubuntu-latest
+    timeout-minutes: 350
+    strategy:
+      fail-fast: false
+      matrix:
+        seed: [101, 102, 103, 104, 105, 106, 107, 108, 109, 110, 111, 112, 113, 114, 115, 116, 117, 118, 119, 120]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: 22 }
+      - run: mkdir -p results && node tools/scenario-overlord.js 1 ${{ inputs.hours }} ${{ matrix.seed }} results/run-${{ matrix.seed }}.json | tee results/run-${{ matrix.seed }}.log
+      - uses: actions/upload-artifact@v4
+        with: { name: 'run-${{ matrix.seed }}', path: results/ }
+  summary:
+    needs: run
+    if: always()
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: 22 }
+      - uses: actions/download-artifact@v4
+        with: { path: all, pattern: 'run-*', merge-multiple: true }
+      - run: |
+          mkdir -p docs/tests
+          f=docs/tests/batch-$(date -u +%Y%m%d-%H%M)-${{ inputs.label }}.md
+          node tools/batch-summary.js all "$f"
+          mkdir -p "${f%.md}" && cp all/*.json "${f%.md}/" 2>/dev/null || true
+          git config user.name "Tov Binyamin Brog"
+          git config user.email "tovbrog-pixel@users.noreply.github.com"
+          git add docs/tests
+          git diff --cached --quiet || git commit -m "AI-vs-AI batch results (${{ inputs.label }})"
+          git pull --rebase
+          git push
