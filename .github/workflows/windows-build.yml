@@ -1,10 +1,7 @@
 name: Windows build
 
 on:
-  push:
-    branches: [main]
-    paths-ignore: ['data/**', 'docs/**', 'tools/data/**', '.github/workflows/terrain-data.yml', '.github/workflows/network-data.yml', 'sources/**', '.github/workflows/sources.yml']
-  workflow_dispatch:
+  workflow_dispatch:   # run by hand once fixes and tests are finished
 
 jobs:
   build:
@@ -35,6 +32,6 @@ jobs:
       - name: Upload installer
         uses: actions/upload-artifact@v4
         with:
-          name: France-1944-installer
+          name: Sarn-Corridor-installer
           path: src-tauri/target/release/bundle/nsis/*.exe
           if-no-files-found: error

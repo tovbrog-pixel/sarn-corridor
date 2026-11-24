@@ -4,5 +4,5 @@
 fn main() {
     tauri::Builder::default()
         .run(tauri::generate_context!())
-        .expect("error while running France 1944");
+        .expect("error while running Sarn Corridor");
 }

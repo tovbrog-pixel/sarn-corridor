@@ -1,5 +1,5 @@
-// Prepares app/ for the desktop shell: the game page (app/index.html, the Overlord slice and the engine's scenarios, opening on the
-// scenario menu), plus the engine files and three.js that the technical test (app/techtest.html) loads.
+// Prepares app/ for the desktop shell: the game page (app/index.html, the Corridor Crisis slice, opening on the
+// scenario menu), plus the engine files and three.js.
 // Run from the repository root: node tools/build-app.js
 const fs = require('fs'), path = require('path');
 const root = path.join(__dirname, '..');
@@ -8,5 +8,5 @@ const outEngine = path.join(root, 'app', 'engine'), outVendor = path.join(root, 
 fs.mkdirSync(outEngine, { recursive: true }); fs.mkdirSync(outVendor, { recursive: true });
 for (const f of engineFiles) fs.copyFileSync(path.join(root, 'engine', 'src', f), path.join(outEngine, f));
 fs.copyFileSync(path.join(root, 'node_modules', 'three', 'build', 'three.min.js'), path.join(outVendor, 'three.min.js'));
-require('child_process').execFileSync(process.execPath, [path.join(__dirname, 'build-preview.js'), path.join(root, 'app'), 'overlord', 'menu'], { stdio: 'inherit' });
+require('child_process').execFileSync(process.execPath, [path.join(__dirname, 'build-preview.js'), path.join(root, 'app'), 'corridor', 'menu'], { stdio: 'inherit' });
 console.log('app/ prepared: the game page, ' + engineFiles.length + ' engine files and three.min.js');

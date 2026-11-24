@@ -1,7 +1,7 @@
 [package]
-name = "france-1944"
+name = "sarn-corridor"
 version = "0.1.0"
-description = "France 1944-45 campaign game"
+description = "Sarn Corridor campaign game"
 authors = ["Tov Binyamin Brog"]
 edition = "2021"
 

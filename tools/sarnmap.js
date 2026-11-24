@@ -31,6 +31,12 @@ function sarnMap(o) {
   for (const r of M.rivers) for (const p of clipLine(r.pts, x0, y0, w, h)) out.rivers.push([r.name, r.order >= 3 ? 1 : 2, p]);   // order 3-4 stops vehicles without a bridge
   for (const l of M.rail) { for (const p of clipLine(l.pts, x0, y0, w, h)) out.rails.push(p); for (const p of clipLine(besideRail(l.pts), x0, y0, w, h)) out.roads.push([3, p]); }
   for (const l of M.roads) for (const p of clipLine(l.pts, x0, y0, w, h)) out.roads.push([2, p]);
+  // local road crossings every 20 km on major rivers, 8 km long, so the engine finds a bridge there (game setting, inference:
+  // the sample map draws only main roads, and a real country of this size has a bridge or ferry about that often)
+  for (const r of M.rivers) { if (r.order < 3) continue; let acc = 10;
+    for (let i = 1; i < r.pts.length; i++) { const a = r.pts[i - 1], b = r.pts[i], L = Math.hypot(b[0] - a[0], b[1] - a[1]); acc += L;
+      if (acc >= 20) { acc = 0; const nx = -(b[1] - a[1]) / (L || 1), ny = (b[0] - a[0]) / (L || 1);
+        for (const p of clipLine([[b[0] - nx * 4, b[1] - ny * 4], [b[0] + nx * 4, b[1] + ny * 4]], x0, y0, w, h)) out.roads.push([2, p]); } } }
   for (const c of M.cities) if (c.x >= x0 && c.x <= x0 + w && c.y >= y0 && c.y <= y0 + h) out.towns.push([c.name, +(c.x - x0).toFixed(2), +(c.y - y0).toFixed(2), c.kind === 'capital' ? 3 : c.size]);
   return out;
 }

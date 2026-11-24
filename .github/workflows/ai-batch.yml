@@ -4,11 +4,11 @@ on:
   workflow_dispatch:
     inputs:
       hours:
-        description: 'Game hours per run (2064 = to 1 September 1944)'
-        default: '2064'
+        description: 'Game hours per run (504 = the full 21 days)'
+        default: '504'
       label:
         description: 'Short label for the summary file'
-        default: 'overlord'
+        default: 'corridor'
 
 permissions:
   contents: write
@@ -25,7 +25,7 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with: { node-version: 22 }
-      - run: mkdir -p results && node tools/scenario-overlord.js 1 ${{ inputs.hours }} ${{ matrix.seed }} results/run-${{ matrix.seed }}.json | tee results/run-${{ matrix.seed }}.log
+      - run: mkdir -p results && node tools/scenario-corridor.js ${{ inputs.hours }} ${{ matrix.seed }} results/run-${{ matrix.seed }}.json | tee results/run-${{ matrix.seed }}.log
       - uses: actions/upload-artifact@v4
         with: { name: 'run-${{ matrix.seed }}', path: results/ }
   summary:

@@ -1,15 +1,15 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
-  "productName": "France 1944",
+  "productName": "Sarn Corridor",
   "version": "0.1.0",
-  "identifier": "com.danelbd.france1944",
+  "identifier": "com.danelbd.sarncorridor",
   "build": {
     "frontendDist": "../app"
   },
   "app": {
     "windows": [
       {
-        "title": "France 1944",
+        "title": "Sarn Corridor",
         "width": 1440,
         "height": 900,
         "resizable": true,
@@ -25,7 +25,7 @@
     "targets": ["nsis"],
     "publisher": "Tov Binyamin Brog",
     "copyright": "Copyright 2026 Tov Binyamin Brog",
-    "shortDescription": "France 1944-45 campaign game",
+    "shortDescription": "Sarn Corridor campaign game",
     "icon": [
       "icons/32x32.png",
       "icons/128x128.png",
