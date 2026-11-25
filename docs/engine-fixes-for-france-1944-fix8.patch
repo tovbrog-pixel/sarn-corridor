@@ -1,0 +1,426 @@
+diff --git a/engine/src/command.js b/engine/src/command.js
+index 16d63ae..5d0f2ca 100644
+--- a/engine/src/command.js
++++ b/engine/src/command.js
+@@ -5,7 +5,7 @@
+ // keeps a reserve when his style calls for it, and passes each child a parallel line of advance, so sister
+ // formations do not cross each other's routes. Children then plan their own orders as before.
+ // review settings, all starting values for balance testing
+-const CMDAI = { spentFrac: .45, spentCoh: .3, stallMin: 180, onObjKm: 1.5, coolMin: 120, townBeyondKm: 4, riverBeyondKm: 3 };
++const CMDAI = { spentFrac: .45, spentCoh: .3, stallMin: 180, onObjKm: 2.5, coolMin: 120, townBeyondKm: 4, riverBeyondKm: 3, kmPerBn: .45, echelonKm: 15, restMin: 1440 };   // kmPerBn: attack frontage per leading battalion (a 9-battalion division needs about 4 km); echelonKm: a child this far behind the others follows as second echelon, and a corps this far beyond an army's objective keeps its orders; restMin: a relieved division rests this long before it can be committed again
+ function attachCommand(S) {
+   const nodes = []; S.commands = nodes; const sc = S.sc;
+   const segOf = (line, a, b) => {           // the part of polyline `line` between distances a and b
+@@ -36,12 +36,35 @@ function attachCommand(S) {
+   // plan the split of one order across the node's children. Returns [{ child, path, line, reserve }].
+   S.planCommandOrder = function (C, path, line, opt) {
+     opt = opt || {}; const kids = C.forms.filter(live); if (!kids.length || !line || line.length < 2) return [];
+-    const p0 = pos(C) || line[0], L = polyLen(line), mid = polyAt(line, L / 2);
++    const p0 = pos(C) || line[0], mid = polyAt(line, polyLen(line) / 2); let L = polyLen(line);
+     let ax = mid.x - p0[0], ay = mid.y - p0[1]; const al = Math.hypot(ax, ay) || 1; ax /= al; ay /= al;
++    // the axis of advance runs square to the objective line, away from our side of it; the line from the node's centre to the
++    // objective decides only which way, since one far-off child (a corps attacking from the other side) can pull that centre aside.
++    // Army orders only: a corps keeps the axis from its centre to the objective, as the tutorial and the scenario plans expect
++    { const lx = line[line.length - 1][0] - line[0][0], ly = line[line.length - 1][1] - line[0][1], ll = Math.hypot(lx, ly);
++      if (opt.square !== false && C.level === 'army' && ll > 1) { let nx = -ly / ll, ny = lx / ll; if (nx * ax + ny * ay < 0) { nx = -nx; ny = -ny; } ax = nx; ay = ny; } }
+     const px = -ay, py = ax;                 // left-hand perpendicular of the axis of advance
++    // a corps standing well beyond the objective line, on the enemy's far side (the Ostval Corps when the army attacks the corridor
++    // from the west), keeps its present orders: its route to the line would cross the whole enemy rear. The player orders it apart.
++    let beyondNote = '';
++    if (C.level === 'army' && kids.length > 1) { const far = kids.filter(c => { const q = pos(c); return q && ((mid.x - q[0]) * ax + (mid.y - q[1]) * ay) < -CMDAI.echelonKm; });
++      if (far.length && far.length < kids.length) { for (const c of far) kids.splice(kids.indexOf(c), 1); beyondNote = far.map(c => c.n).join(' and ') + (far.length > 1 ? ' stand' : ' stands') + ' beyond the objective, on the far side of the enemy, and ' + (far.length > 1 ? 'keep their' : 'keeps its') + ' present orders.'; } }
+     // the objective line runs left to right as the commander faces it
+     const side = (q) => (q[0] - mid.x) * px + (q[1] - mid.y) * py;
+-    const ln = side(line[0]) >= side(line[line.length - 1]) ? line.slice() : line.slice().reverse();
++    let ln = side(line[0]) >= side(line[line.length - 1]) ? line.slice() : line.slice().reverse(), L0 = L, widened = '';
++    // an objective line too short for the formations: the commander widens it along its own direction, equally on both flanks,
++    // so the drawn objective stays the centre of the attack and every division gets a sector it can attack on
++    // ... and so that the formations advance on the frontage they hold now: a line shorter than their spread runs on to cover it, so
++    // the flanks go straight ahead and the formations facing the objective take it (Tov 24 Nov 2026, "I ordered the whole army to advance")
++    const needKm = kids.reduce((s, c) => s + Math.max(1, weight(c)), 0) * CMDAI.kmPerBn;
++    if (opt.widen !== false) { const a = ln[0], b = ln[ln.length - 1], ul = Math.hypot(b[0] - a[0], b[1] - a[1]) || 1, ux = (b[0] - a[0]) / ul, uy = (b[1] - a[1]) / ul, tq = q => (q[0] - mid.x) * ux + (q[1] - mid.y) * uy;
++      let lo = Math.min(-L / 2, -needKm / 2), hi = Math.max(L / 2, needKm / 2);
++      // an army keeps its frontage; a corps closes up on the objective it is given, as concentration demands
++      if (C.level === 'army') for (const c of kids) { const q = pos(c); if (!q) continue; const hw = Math.max(1.5, weight(c) * CMDAI.kmPerBn / 2), t = tq(q); lo = Math.min(lo, t - hw); hi = Math.max(hi, t + hw); }
++      const eL = -L / 2 - lo, eR = hi - L / 2;
++      if (eL > .5 || eR > .5) { const a1 = ln[1], b1 = ln[ln.length - 2], ua = Math.hypot(a[0] - a1[0], a[1] - a1[1]) || 1, ub = Math.hypot(b[0] - b1[0], b[1] - b1[1]) || 1, cl = (x, lim) => Math.max(0, Math.min(lim, x));
++        ln = [[cl(a[0] + (a[0] - a1[0]) / ua * eL, S.map.w), cl(a[1] + (a[1] - a1[1]) / ua * eL, S.map.h)]].concat(ln, [[cl(b[0] + (b[0] - b1[0]) / ub * eR, S.map.w), cl(b[1] + (b[1] - b1[1]) / ub * eR, S.map.h)]]);
++        L = polyLen(ln); widened = 'The objective is ' + L0.toFixed(0) + ' km wide; the line runs on to ' + L.toFixed(0) + ' km' + (C.level === 'army' ? ' to cover the front, the formations facing the objective take it as drawn.' : ', the room ' + kids.length + ' divisions need to attack, the main effort on the objective as drawn.'); } }
+     // children ordered left to right by where they stand now, so assignments do not cross
+     const at = kids.map(c => ({ c, p: pos(c) || p0 })).sort((a, b) => ((b.p[0] - p0[0]) * px + (b.p[1] - p0[1]) * py) - ((a.p[0] - p0[0]) * px + (a.p[1] - p0[1]) * py));
+     // a reserve: cautious commanders hold one child back when they have three or more
+@@ -61,6 +84,15 @@ function attachCommand(S) {
+       let ri = 0, bw = 1e9; at.forEach((o, i) => { const w = weight(o.c); if (i > 0 && i < at.length - 1 && w < bw) { bw = w; ri = i; } }); if (!ri) ri = Math.floor(at.length / 2);
+       reserve = at.splice(ri, 1)[0];
+     }
++    // second echelon: children standing well behind the rest (by the median depth along the axis) follow the main effort
++    // instead of taking sectors in the line, so their routes do not cut across the leading formations' (Tov 24 Nov 2026)
++    const second = []; let med = 0;
++    if (opt.reserve !== false && at.length >= 3) {
++      // depth: distance behind the objective line (negative for a child already beyond it, as a corps attacking from the far side)
++      const behind = o => (mid.x - o.p[0]) * ax + (mid.y - o.p[1]) * ay;   // along the axis only, so a corps off a flank does not count as behind
++      const ds = at.map(behind).sort((a, b) => a - b); med = ds[ds.length >> 1];
++      for (let i = at.length - 1; i >= 0; i--) if (behind(at[i]) > med + CMDAI.echelonKm && at.length - 1 >= 2) second.push(at.splice(i, 1)[0]); }
++    if (second.length) note = (note ? note + ' ' : '') + second.map(o => o.c.n).reverse().join(' and ') + (second.length > 1 ? ' follow' : ' follows') + ' in second echelon behind the main effort.';
+     const W = at.reduce((s, o) => s + Math.max(1, weight(o.c)), 0); let acc = 0; const out = [];
+     const P = (path && path.length ? path : []).filter(q => q);
+     const bnd = [0]; for (const o of at) { acc += Math.max(1, weight(o.c)); bnd.push(acc / W * L); }
+@@ -94,8 +126,14 @@ function attachCommand(S) {
+       if (!R) { const p = reserve.p; R = { child: reserve.c, path: [], line: [[p[0] + px * hw, p[1] + py * hw], [p[0] - px * hw, p[1] - py * hw]], reserve: true, p, off: roff }; }   // every way forward crosses a sister division: the reserve assembles where it stands
+       out.push(R);
+     }
++    second.forEach((o, k) => {                // second echelon: lanes either side of the centre, halting 10 km short of the objective
++      const off = (k - (second.length - 1) / 2) * 6, hw = 2, bx = mid.x - ax * 10 + px * off, by = mid.y - ay * 10 + py * off;
++      // the route runs first behind the line of departure to the centre (8 km behind the leading formations), then forward, so the
++      // second echelon passes behind the leading divisions' columns instead of across them
++      const wb = med + 8, wx = Math.max(0, Math.min(S.map.w, mid.x - ax * wb + px * off)), wy = Math.max(0, Math.min(S.map.h, mid.y - ay * wb + py * off));
++      out.push({ child: o.c, path: [[wx, wy]].concat(P.map(q => [q[0] + px * off, q[1] + py * off])), line: [[bx + px * hw, by + py * hw], [bx - px * hw, by - py * hw]], reserve: true }); });
+     out.why = reserve && note ? (towns.length || beyond ? 'town' : river ? 'river' : '') : '';
+-    out.note = note; return out;
++    out.note = [widened, note, beyondNote].filter(Boolean).join(' '); out.line = ln; return out;
+   };
+ 
+   // issue an order to a node: staff time first, then the children receive theirs
+@@ -118,7 +156,7 @@ function attachCommand(S) {
+     if (plan.note) report(C, plan.note);
+   }
+   function send(child, path, line, opt, reserve, then) {
+-    const o = Object.assign({}, opt, reserve ? { then: 'reserve' } : {}, then ? { then } : {}); delete o.reserve;
++    const o = Object.assign({}, opt, reserve ? { then: 'reserve' } : {}, then ? { then } : {}, { byCmd: 1 }); delete o.reserve;   // byCmd: the corps staff plans river crossings for divisions under its orders
+     if (child.forms) S.issueCommandOrder(child, path, line, o); else S.issueOrder(child, path, line, o);
+   }
+   // a division the player gives its own order leaves the corps plan: the corps commander no longer counts it as a sector or as his reserve
+@@ -131,15 +169,22 @@ function attachCommand(S) {
+     const O = C.order, P = O.plan; if (!P) return; O.nextReview = S.t + 30;
+     for (const q of P) { if (q.reserve || !live(q.child)) continue; const d = lineDist(q.child, q.line); if (d < q.best - .5) { q.best = d; q.tBest = S.t; } }
+     if (S.t - O.lastAct < CMDAI.coolMin) return;
+-    const fwd = P.filter(q => !q.reserve), res = P.find(q => q.reserve && live(q.child) && weight(q.child) >= CMDAI.spentFrac * q.w0);
++    const fwd = P.filter(q => !q.reserve), res = P.find(q => q.reserve && live(q.child) && weight(q.child) >= CMDAI.spentFrac * q.w0 && !(q.restUntil > S.t));   // a formation just pulled out of the line rests before it can be committed again
+     const moving = n => n.forms ? n.forms.some(moving) : !!n.transit;
+-    const state = q => { if (!live(q.child)) return 'lost'; if (moving(q.child)) { q.tBest = S.t; return 'ok'; } if (weight(q.child) < CMDAI.spentFrac * q.w0 || cohOf(q.child) < CMDAI.spentCoh) return 'spent';
++    // a division waiting at a river, for boats, a bridge or a route, is not stalled: committing the reserve would only bring it to the same bank
++    const atRiver = n => n.forms ? n.forms.some(atRiver) : ((S.xings || []).some(X => X.F === n && !X.done) || !!n.alignHold || !!n.flankHold || /crossing|bridg|no route|is down/i.test(n.status || ''));   // also a division halted on purpose for its neighbours or its flank (doctrine module)
++    // arrived: a division whose own order is complete (it stands as near the objective as the ground allows, a river bank for one on the water)
++    const fin = n => n.forms ? n.forms.filter(live).every(fin) : !!(n.order && n.order.st === 'done');
++    const state = q => { if (!live(q.child)) return 'lost'; if (fin(q.child)) return 'done'; if (moving(q.child) || atRiver(q.child)) { q.tBest = S.t; return 'ok'; } if (weight(q.child) < CMDAI.spentFrac * q.w0 || cohOf(q.child) < CMDAI.spentCoh) return 'spent';
+       const d = lineDist(q.child, q.line); if (d < CMDAI.onObjKm) return 'done'; if (S.t - q.tBest > CMDAI.stallMin && S.t - O.t0 > CMDAI.stallMin) return 'stalled'; return 'ok'; };
+-    // 1. commit the reserve where a forward division is spent or stalled
+-    const bad = fwd.map(q => ({ q, st: state(q) })).find(o => o.st === 'spent' || o.st === 'stalled' || o.st === 'lost');
+-    // a reserve kept back for a town or a river stays back while a forward division is only stalled and the reason still stands (fix A1);
+-    // a stalled sector gets fresh troops once, so two divisions do not relieve each other in turn all day (fix A2)
+-    const kept = bad && bad.st === 'stalled' && (bad.q.relieved || (res && O.why && res.child === O.whyChild && S.planCommandOrder(C, O.path, O.line, O.opt).why));
++    // 1. commit the reserve where a forward division is spent or lost. A division merely stalled against a defended line keeps its
++    // sector: the commander reports it once and leaves the decision to the player, because relieving divisions every time an attack
++    // is held up swapped them back and forth and turned the front into churn (Sarn Corridor play, 24 Nov 2026). This replaces the
++    // relieve-once rule of fix A2 and makes the reserve-kept rule of fix A1 hold for every stall.
++    const sts = fwd.map(q => ({ q, st: state(q) }));
++    for (const o of sts) if (o.st === 'stalled' && !o.q.stallRep) { o.q.stallRep = 1; report(C, o.q.child.n + ' is held up short of its objective and has made no ground for ' + Math.round((S.t - o.q.tBest) / 60) + ' hours. ' + (res ? res.child.n + ' stands ready in reserve.' : 'No reserve is left.'), 1); }
++    for (const o of sts) if (o.st === 'ok' && o.q.stallRep && S.t - o.q.tBest < 60) o.q.stallRep = 0;
++    const bad = sts.find(o => o.st === 'spent' || o.st === 'lost'), kept = false;
+     if (bad && res && !kept) {
+       const q = bad.q; if (bad.st === 'stalled') res.relieved = true;
+       // the relieved division rests where it stands and becomes the reserve; the fresh division passes through to the sector
+@@ -147,7 +192,7 @@ function attachCommand(S) {
+         send(q.child, [], [[p[0] - dy / dl * hw, p[1] + dx / dl * hw], [p[0] + dy / dl * hw, p[1] - dx / dl * hw]], O.opt, false, 'rest'); }
+       send(res.child, [], q.line, O.opt, false);
+       res.reserve = false; res.line = q.line; res.best = 1e9; res.tBest = S.t; res.w0 = weight(res.child);
+-      if (bad.st !== 'lost') { q.reserve = true; q.w0 = Math.max(weight(q.child), 1); }
++      if (bad.st !== 'lost') { q.reserve = true; q.w0 = Math.max(weight(q.child), 1); q.restUntil = S.t + CMDAI.restMin; }
+       else P.splice(P.indexOf(q), 1);
+       O.lastAct = S.t; report(C, q.child.n + ' is ' + bad.st + '; ' + res.child.n + ' committed from reserve to take over its sector.', 2); return;
+     }
+diff --git a/engine/src/doctrine.js b/engine/src/doctrine.js
+index 4074035..d3150be 100644
+--- a/engine/src/doctrine.js
++++ b/engine/src/doctrine.js
+@@ -12,7 +12,7 @@
+ //     division forward to line the open flank.
+ //  4. Main effort: the army commander gives the corps with the best objective a narrow zone and a reserve; the others attack
+ //     on wide zones without one (command.js, armyTick).
+-const DOCTRINE = { devKm: 15, alignKm: 8, guardKm0: 10, guardKmPerBn: 4, flankOff: 7, sampleKm: 4, tickMin: 30 };
++const DOCTRINE = { devKm: 15, alignKm: 8, guardKm0: 10, guardKmPerBn: 4, flankOff: 7, sampleKm: 4, tickMin: 30, xingNearKm: 6, bridgeKm: 8 };   // xingNearKm: how near the river the division must be to start an assault crossing; bridgeKm: an intact bridge this close is used instead
+ function attachDoctrine(S) {
+   const sc = S.sc, D = Object.assign({}, DOCTRINE, sc.doctrine || {});
+   const fighting = u => u.active && !u.dead && u.cls !== 'hq' && u.mv !== 'ship';
+@@ -58,6 +58,21 @@ function attachDoctrine(S) {
+     for (const F of S.forms) { const why = F.flankHold || F.alignHold; if (why && F.status !== why && !F.contact) F.status = why; }
+   }
+   let last = -1e9, lastDev = -1e9;
+-  const prev = S.cmdHook; S.cmdHook = function () { if (prev) prev(); if (S.t - lastDev >= 60) { lastDev = S.t; devTick(); } if (S.t - last >= D.tickMin) { last = S.t; frontTick(); } };
++  // river assault: a division ordered to an objective across a river that needs a bridge, with no intact bridge within bridgeKm of its
++  // axis, puts its battalions over in assault boats where the axis meets the river, instead of marching its columns to a distant bridge
++  // and crowding its neighbours (Tov 24 Nov 2026, "No one makes a river assault?"). The AI side and divisions under corps or army
++  // orders do this themselves; a division under the player's direct order waits for the Cross order.
++  function xingTick() {
++    if (!S.cross || !S.xings) return; const map = S.map;
++    for (const F of S.forms) { const O = F.order; if (F.dead || !F.active || !O || O.st !== 'active' || !O.line || O.then === 'reserve') continue;
++      if (!(S.ai[F.s] || F.staff || O.byCmd) || S.t < (F.xAutoT || 0) || S.xings.some(X => X.F === F && !X.done)) continue;
++      const c0 = [F.cx, F.cy], L = O.line, m = [(L[0][0] + L[L.length - 1][0]) / 2, (L[0][1] + L[L.length - 1][1]) / 2], dist = Math.hypot(m[0] - c0[0], m[1] - c0[1]); if (dist < 3) continue;
++      let hit = null; for (let d = .5; d < dist; d += .5) { const x = c0[0] + (m[0] - c0[0]) * d / dist, y = c0[1] + (m[1] - c0[1]) * d / dist, t = map.t[map.idx(x, y)]; if (t === T.RIVER) { hit = [x, y, d]; break; } if (t === T.SEA) break; }
++      if (!hit || hit[2] > D.xingNearKm) continue;                                               // no river on the axis, or the division is not yet near it
++      if (map.bridges.some(b => b.intact !== false && !b.gone && Math.hypot(b.x - hit[0], b.y - hit[1]) < D.bridgeKm)) continue;   // a bridge close by: use it
++      F.xAutoT = S.t + 360; const r = S.cross(F, hit[0], hit[1]);
++      if (r && typeof r === 'object') { F.status = 'Assault crossing'; S.say(F.s, F.n + ': no bridge near our axis; the battalions go over the river in assault boats.', 1); } }
++  }
++  const prev = S.cmdHook; S.cmdHook = function () { if (prev) prev(); if (S.t - lastDev >= 60) { lastDev = S.t; devTick(); } if (S.t - last >= D.tickMin) { last = S.t; frontTick(); xingTick(); } };
+   return S;
+ }
+diff --git a/engine/src/map.js b/engine/src/map.js
+index 7571688..bf32739 100644
+--- a/engine/src/map.js
++++ b/engine/src/map.js
+@@ -65,6 +65,8 @@ function buildMap(sc) {
+     if (near) { m.t[c] = T.BEACH; m.el[c] = 2; }
+   }
+   // coastal smoothing of elevation near sea
++  // A* heuristic table: HT[dx * H + dy] = Math.hypot(dx, dy) * 0.8 for cell offsets, the same values the search computed per step
++  let HT_ = null; const htab = () => HT_ || (HT_ = (() => { const z = new Float64Array(W * H); for (let dx = 0; dx < W; dx++) for (let dy = 0; dy < H; dy++) z[dx * H + dy] = Math.hypot(dx, dy) * .8; return z; })());
+   const idx = (x, y) => { const i = Math.max(0, Math.min(W - 1, Math.floor(x / cs))), j = Math.max(0, Math.min(H - 1, Math.floor(y / cs))); return j * W + i; };
+   m.idx = idx;
+   function raster(pts, fn) { let pi = -1, pj = -1; for (const p of pts) { const i = Math.floor(p[0] / cs), j = Math.floor(p[1] / cs); if (i < 0 || j < 0 || i >= W || j >= H) { pi = -1; continue; } if (i === pi && j === pj) continue; if (pi >= 0 && i !== pi && j !== pj) fn(j * W + pi); fn(j * W + i); pi = i; pj = j; } }
+@@ -139,12 +141,32 @@ function buildMap(sc) {
+   // trucks keep to roads; desert, towns and beaches count as drivable ground for them
+   const offRoad = c => !m.road[c] && m.t[c] !== T.DESERT && m.t[c] !== T.TOWN && m.t[c] !== T.CITY && m.t[c] !== T.BEACH && m.t[c] !== T.RIVER;
+   m.pathCount = 0;
++  // regions a search can cross: cells with fac[k] > 0 that the block mask leaves open, joined orthogonally, or diagonally where
++  // both side cells are passable (the search's own move rules). findPath with opt.comp skips a search that cannot reach its goal.
++  m.compLabel = function (k, block, lab) {
++    const fac = m.fac[k], st = new Int32Array(N); lab = lab || new Int32Array(N); lab.fill(0); let n = 0;
++    const ok = c => fac[c] > 0 && !(block && block[c]);
++    for (let c0 = 0; c0 < N; c0++) { if (lab[c0] || !ok(c0)) continue; n++; lab[c0] = n; let sp = 0; st[sp++] = c0;
++      while (sp) { const c = st[--sp], ci = c % W, cj = (c / W) | 0;
++        for (let dj = -1; dj <= 1; dj++) for (let di = -1; di <= 1; di++) { if (!di && !dj) continue; const ni = ci + di, nj = cj + dj; if (ni < 0 || nj < 0 || ni >= W || nj >= H) continue; const q = nj * W + ni;
++          if (lab[q] || !ok(q)) continue; if (di && dj && (fac[cj * W + ni] <= 0 || fac[nj * W + ci] <= 0)) continue; lab[q] = n; st[sp++] = q; } } }
++    return lab;
++  };
++  // can a search from cell a reach cell b under the same rules? a expands even if blocked; b is accepted even if blocked
++  function canReach(k, lab, block, a, b) {
++    const fac = m.fac[k], nb = (c, f) => { const ci = c % W, cj = (c / W) | 0; for (let dj = -1; dj <= 1; dj++) for (let di = -1; di <= 1; di++) { if (!di && !dj) continue; const ni = ci + di, nj = cj + dj; if (ni < 0 || nj < 0 || ni >= W || nj >= H) continue; const q = nj * W + ni; if (fac[q] <= 0) continue; if (di && dj && (fac[cj * W + ni] <= 0 || fac[nj * W + ci] <= 0)) continue; if (f(q)) return true; } return false; };
++    const from = new Set(); nb(a, q => { if (q === b) { from.add(-1); return true; } if (lab[q]) from.add(lab[q]); return false; });
++    if (from.has(-1)) return fac[b] > 0; if (!from.size || fac[b] <= 0) return false;
++    if (lab[b] && from.has(lab[b])) return true;
++    return nb(b, q => lab[q] > 0 && from.has(lab[q]));
++  }
+   m.findPath = function (k, sx, sy, gx, gy, opt) {
+     m.pathCount++; opt = opt || {}; const fac = (opt.cross ? m.facX : m.fac)[k], block = opt.block, threat = opt.threat, rb = opt.road || 0;   // rb: extra cost on ground with no road (supply columns)
+     const s0 = m.snap(k, sx, sy, 3), g0 = m.snap(k, gx, gy, opt.grad || 4); if (!s0 || !g0) return null;
+     const sc0 = idx(s0[0], s0[1]), gc = idx(g0[0], g0[1]), gi = gc % W, gj = (gc / W) | 0;
+     if (sc0 === gc) return [[g0[0], g0[1]]];
+-    gen++; hp.length = 0; hf.length = 0; g[sc0] = 0; stamp[sc0] = gen; from[sc0] = -1; push(sc0, 0);
++    if (opt.comp && !canReach(k, opt.comp, block, sc0, gc)) return null;   // the search would fail: skip it
++    const HT = htab(); gen++; hp.length = 0; hf.length = 0; g[sc0] = 0; stamp[sc0] = gen; from[sc0] = -1; push(sc0, 0);
+     let found = false, it = 0; const maxIt = opt.maxIt || N * 2;
+     while (hp.length && it++ < maxIt) {
+       const c = pop(); if (closed[c] === gen) continue; closed[c] = gen; if (c === gc) { found = true; break; }
+@@ -155,7 +177,7 @@ function buildMap(sc) {
+         if (di && dj && (fac[cj * W + ni] <= 0 || fac[nj * W + ci] <= 0)) continue;
+         let cost = (di && dj ? 1.4142 : 1) / f; if (rb && offRoad(n)) cost *= rb; if (threat) cost += threat[n];
+         const ng = gcst + cost;
+-        if (stamp[n] !== gen || ng < g[n]) { g[n] = ng; stamp[n] = gen; from[n] = c; push(n, ng + Math.hypot(ni - gi, nj - gj) * .8); }
++        if (stamp[n] !== gen || ng < g[n]) { g[n] = ng; stamp[n] = gen; from[n] = c; push(n, ng + HT[(ni > gi ? ni - gi : gi - ni) * H + (nj > gj ? nj - gj : gj - nj)]); }
+       }
+     }
+     if (!found) return null;
+diff --git a/engine/src/render.js b/engine/src/render.js
+index 9ed50ed..2133a45 100644
+--- a/engine/src/render.js
++++ b/engine/src/render.js
+@@ -97,7 +97,7 @@ function createRenderer(S, glCanvas, ovCanvas, opt) {
+         // the staff map shows true ownership near your troops, near objectives and where reconnaissance has looked; elsewhere it keeps the last picture
+         if (P < 0) view.set(O.a); else { const look = (x, y, r) => { const i0 = Math.max(0, Math.floor((x - r) / cw)), i1 = Math.min(gw - 1, Math.floor((x + r) / cw)), j0 = Math.max(0, Math.floor((y - r) / cw)), j1 = Math.min(gh - 1, Math.floor((y + r) / cw)); for (let j = j0; j <= j1; j++) for (let i = i0; i <= i1; i++) { const c = j * gw + i; view[c] = O.a[c]; } };
+           for (const u of S.subs) if (u.s === P && u.active && !u.dead && u.mv !== 'ship') look(u.x, u.y, 4); for (const v of S.vp) look(v.x, v.y, 1); for (const u of S.subs) if (u.s !== P && u.rpBy === P && S.t - u.rptT < 10) look(u.x, u.y, 2.5); }
+-        for (let j = 0; j < gh; j++) for (let i = 0; i < gw; i++) { const c = j * gw + i, o = ((gh - 1 - j) * gw + i) * 4, s0 = view[c] === 0; if (sea[c]) { data[o + 3] = 0; continue; }
++        for (let j = 0; j < gh; j++) for (let i = 0; i < gw; i++) { const c = j * gw + i, o = ((gh - 1 - j) * gw + i) * 4; if (P >= 0 && O.a[c] === P) view[c] = P;   /* ground you hold shows as yours: no stale enemy patches behind your own line */ const s0 = view[c] === 0; if (sea[c]) { data[o + 3] = 0; continue; }
+           data[o] = s0 ? 52 : 210; data[o + 1] = s0 ? 40 : 55; data[o + 2] = s0 ? 150 : 40; data[o + 3] = s0 ? 74 : 64; }
+         tex.needsUpdate = true;
+         // front line: marching squares at the half-way level of a lightly smoothed ownership field
+diff --git a/engine/src/render3.js b/engine/src/render3.js
+index 4820a14..329ca32 100644
+--- a/engine/src/render3.js
++++ b/engine/src/render3.js
+@@ -41,8 +41,11 @@ function initOverlay(R, cv) {
+   function xmark(x, y, lab) { const p = R.project(x, y, .12); if (!p) return; ctx.strokeStyle = '#c01010'; ctx.lineWidth = 3; ctx.beginPath(); ctx.moveTo(p[0] - 8, p[1] - 8); ctx.lineTo(p[0] + 8, p[1] + 8); ctx.moveTo(p[0] + 8, p[1] - 8); ctx.lineTo(p[0] - 8, p[1] + 8); ctx.stroke(); text(lab, p[0], p[1] - 14, '#a01010', 11, true, 'center'); }
+   function circle(x, y, r, col, label) { const o = []; for (let i = 0; i <= 28; i++) { const a = i / 28 * 6.283; o.push([x + Math.cos(a) * r, y + Math.sin(a) * r]); } const q = poly(o); stroke(q, 2.5, col, [8, 5]); const c = R.project(x, y, .05); if (c && label) text(label, c[0], c[1], col, 12, true, 'center'); }
+   // a formation or regiment symbol: nation colour, branch mark, size mark above, name below, strength bar
++  // selected formation: true; another division of the selected division's corps (or of a selected corps): 'mate'
++  const CLOSE_KM = 8;   // zoomed in closer than this, vehicles and convoy trucks are drawn as models
++  const selOf = F => R.sel === F ? true : R.sel && F.parent && (R.sel.parent === F.parent || R.sel === F.parent) && F.parent.level === 'corps' ? 'mate' : false;
+   function bigCounter(x, y, k, F, cls, mark, name, str, sel, own) {
+-    const w = 26 * k, h = 17 * k, l = x - w / 2, r = x + w / 2, t = y - h / 2, b = y + h / 2; ctx.globalAlpha = 1; ctx.fillStyle = NATCOL[F.nat]; ctx.fillRect(l, t, w, h); ctx.lineWidth = sel ? 3 : 1.6; ctx.strokeStyle = sel ? '#ffe04a' : own ? '#101010' : '#b01818'; ctx.strokeRect(l, t, w, h);
++    const w = 26 * k, h = 17 * k, l = x - w / 2, r = x + w / 2, t = y - h / 2, b = y + h / 2; ctx.globalAlpha = 1; ctx.fillStyle = NATCOL[F.nat]; ctx.fillRect(l, t, w, h); ctx.lineWidth = sel === true ? 3 : sel ? 2.4 : 1.6; ctx.strokeStyle = sel === true ? '#ffe04a' : sel ? 'rgba(255,224,74,.55)' : own ? '#101010' : '#b01818'; ctx.strokeRect(l, t, w, h);
+     ctx.strokeStyle = '#f4f1e4'; ctx.fillStyle = '#f4f1e4'; ctx.lineWidth = 1.4 * k; ctx.beginPath();
+     if (cls === 'inf') { ctx.moveTo(l, t); ctx.lineTo(r, b); ctx.moveTo(r, t); ctx.lineTo(l, b); }
+     if (cls === 'arm') { ctx.moveTo(x + w * .3, y); ctx.ellipse(x, y, w * .3, h * .26, 0, 0, 6.3); }
+@@ -101,7 +104,8 @@ function initOverlay(R, cv) {
+     if (S.columnView) for (const C of S.columnView()) { if (!mine(C.s) && P >= 0) continue; const stand = C.ph !== 'move', hd = stand ? (C.ph === 'unload' ? C.L : 0) : Math.min(C.head, C.L);
+       const h0 = C.at(hd), a0 = R.project(h0.x, h0.y, .1); if (!a0) continue; const hb = C.at(Math.max(0, hd - .5)), hf = C.at(Math.min(C.L, hd + .5)), b0 = R.project(hb.x, hb.y, .1), f0 = R.project(hf.x, hf.y, .1); if (!b0 || !f0) continue;
+       const pxKm = Math.max(.5, Math.hypot(f0[0] - b0[0], f0[1] - b0[1])) / Math.max(.05, Math.hypot(hf.x - hb.x, hf.y - hb.y)), col = C.s ? '150,40,30' : '35,70,160', rail = C.mode === 'rail';
+-      const nUnit = C.F.subs.filter(u => !u.dead).length, n = rail ? Math.max(4, Math.min(9, Math.round(nUnit * .6))) : Math.max(3, Math.min(7, Math.round(nUnit * .45))), zf = Math.max(1, Math.min(2.4, pxKm * .012)), cw = (rail ? 15 : C.mode === 'foot' ? 7 : 11) * zf, ch = (rail ? 7 : 5) * zf, gap = 2.5 * zf;   // cars grow a little as the camera closes in
++      const nUnit = C.F.subs.filter(u => !u.dead).length, n0 = rail ? Math.max(4, Math.min(9, Math.round(nUnit * .6))) : Math.max(3, Math.min(7, Math.round(nUnit * .45))), far = cam.dist > 150 ? 2 : cam.dist > 60 ? 1 : 0, zf = far === 2 ? .5 : far === 1 ? .7 : Math.max(1, Math.min(2.4, pxKm * .012)), cw = (rail ? 15 : C.mode === 'foot' ? 7 : 11) * zf, ch = (rail ? 7 : 5) * zf, gap = 2.5 * zf;   // cars grow a little as the camera closes in
++      const n = far === 2 ? 2 : far === 1 ? Math.min(n0, 4) : n0;   // from afar a train is a short glyph, not a rake tens of km long on the map
+       const step = (cw + gap) / pxKm;   // km along the route between cars, so the rake keeps its size on screen and follows the curves
+       const draw = (k, body) => { const d = hd - k * step; if (d < -step * .5 && !stand) return null; const dd = Math.max(0, d), q = C.at(dd), q2 = C.at(Math.min(C.L, dd + step * .4)), a = R.project(q.x, q.y, .12), b = R.project(q2.x, q2.y, .12); if (!a || !b) return null;
+         let ang = Math.atan2(b[1] - a[1], b[0] - a[0]); if (dd <= 0 || Math.hypot(b[0] - a[0], b[1] - a[1]) < .01) ang = Math.atan2(f0[1] - b0[1], f0[0] - b0[0]);
+@@ -122,6 +126,7 @@ function initOverlay(R, cv) {
+     for (const c of S.convoys) { if (c.dead) continue; const own = mine(c.s); if (!own && !c.seen && !(c.rpBy === P && S.t - c.rptT < 30)) continue; const col = c.s ? '150,40,30' : '35,70,160', back = c.st !== 'out';
+       if (own && !back && (R.showAll || c.F === R.sel)) { ctx.setLineDash([5, 5]); ctx.lineWidth = 1.6; ctx.strokeStyle = 'rgba(' + col + ',.55)'; ctx.beginPath(); let st = false; const a0 = R.project(c.x, c.y, .1); if (a0) { ctx.moveTo(a0[0], a0[1]); st = true; } for (let k = c.pi; k < c.path.length; k++) { const q = R.project(c.path[k][0], c.path[k][1], .1); if (!q) continue; if (st) ctx.lineTo(q[0], q[1]); else { ctx.moveTo(q[0], q[1]); st = true; } } ctx.stroke(); ctx.setLineDash([]); }
+       const p = R.project(c.x, c.y, .3); if (!p) continue; const w = 26, h = 14, x = p[0] - w / 2, y = p[1] - h - 8;
++      if (cam.dist < CLOSE_KM) { if (own) text(c.haul ? c.haul.nm : back ? 'empty' : Math.round(c.load) + ' loads', p[0], p[1] - 14, 'rgba(' + col + ',1)', 9, true, 'center'); continue; }   /* close in, the trucks themselves show (render2) */
+       ctx.fillStyle = back ? 'rgba(235,230,215,.75)' : 'rgba(245,240,222,.95)'; ctx.strokeStyle = 'rgba(' + col + ',' + (back ? .5 : 1) + ')'; ctx.lineWidth = 1.6; ctx.fillRect(x, y, w, h); ctx.strokeRect(x, y, w, h);
+       ctx.beginPath(); ctx.moveTo(x, y + h); ctx.lineTo(x + w, y); ctx.stroke(); ctx.beginPath(); ctx.arc(x + 7, y + h + 3, 2.4, 0, 6.3); ctx.arc(x + w - 7, y + h + 3, 2.4, 0, 6.3); ctx.fillStyle = 'rgba(' + col + ',1)'; ctx.fill();
+       if (own && cam.dist < 110) text(c.haul ? c.haul.nm : back ? 'empty' : Math.round(c.load) + ' loads', p[0], y - 3, 'rgba(' + col + ',1)', 9, true, 'center'); }
+@@ -181,10 +186,10 @@ function initOverlay(R, cv) {
+     if (lod) for (const F of S.forms) { if (!F.active || F.dead) continue; const live = F.subs.filter(u => u.active && !u.dead); if (!live.length) continue; const own = mine(F.s), seen = live.filter(u => u.vis); if (!own && !seen.length) continue;
+       const isDiv = F.regs && F.regs.filter(q => q.role === 'man').length >= 2, tot = F.subs.reduce((a, u) => a + u.size, 0) || 1, str = live.reduce((a, u) => a + u.size * u.str, 0) / tot, arm = live.filter(u => u.cls === 'arm').length * 3 >= live.length;
+       if (lod === 2 || !F.regs) { const q = R.project(F.cx, F.cy, .3); if (!q || q[0] < -40 || q[0] > W + 40 || q[1] < -40 || q[1] > H + 40) continue;
+-        bigCounter(q[0], q[1], 1.5, F, arm ? 'arm' : live[0].cls === 'art' ? 'art' : 'inf', isDiv ? 'XX' : live.length > 2 ? 'X' : 'II', lbl(q, F.n.replace(/ (Infantry |Armou?red |Airborne )?Division.*| \(.*/, m => /Armou?red/.test(m) ? ' Armd' : /Airborne/.test(m) ? ' Abn' : '').replace(/^(\d+)(st|nd|rd|th)\b/, '$1')), str, R.sel === F, own); R.hits.push([live[0], q[0], q[1], F]); }   /* the fourth entry tells the hover note this symbol is the whole formation (fix D2) */
++        bigCounter(q[0], q[1], 1.5, F, arm ? 'arm' : live[0].cls === 'art' ? 'art' : 'inf', isDiv ? 'XX' : live.length > 2 ? 'X' : 'II', lbl(q, F.n.replace(/ (Infantry |Armou?red |Airborne )?Division.*| \(.*/, m => /Armou?red/.test(m) ? ' Armd' : /Airborne/.test(m) ? ' Abn' : '').replace(/^(\d+)(st|nd|rd|th)\b/, '$1')), str, selOf(F), own); R.hits.push([live[0], q[0], q[1], F]); }   /* the fourth entry tells the hover note this symbol is the whole formation (fix D2) */
+       else for (const G of F.regs) { const us = G.subs.filter(u => u.active && !u.dead && (own || u.vis)); if (!us.length) continue; const x = us.reduce((a, u) => a + u.x, 0) / us.length, y = us.reduce((a, u) => a + u.y, 0) / us.length, q = R.project(x, y, .25); if (!q || q[0] < -40 || q[0] > W + 40 || q[1] < -40 || q[1] > H + 40) continue;
+         const gs = us.reduce((a, u) => a + u.size * u.str, 0) / (G.subs.reduce((a, u) => a + u.size, 0) || 1), cl = G.role === 'arty' ? 'art' : us.filter(u => u.cls === 'arm').length * 2 >= us.length ? 'arm' : G.role === 'troops' ? 'eng' : 'inf';
+-        bigCounter(q[0], q[1], 1.15, F, cl, /Brigade|Bde|CC[ABR]|Command/.test(G.n) ? 'X' : G.role === 'man' || G.role === 'arty' ? 'III' : 'II', lbl(q, G.n.replace(/\b(\w+)( \1)+\b/g, '$1').replace(/Infantry Brigade/, 'Bde').replace(/Armoured Brigade/, 'Armd Bde').replace(/Grenadier-Regiment/, 'GR').replace(/Panzergrenadier-Regiment/, 'PzGR').replace(/Panzer-Regiment/, 'PzR').replace(/Division Artillery|Royal Artillery|.*Artillerie-Regiment/, 'Arty').replace(/Division troops|Divisionstruppen/, 'Troops').replace(/ Infantry$/, ' Inf').slice(0, 14)), gs, R.sel === F, own); R.hits.push([us[0], q[0], q[1], F, G, us]); } }
++        bigCounter(q[0], q[1], 1.15, F, cl, /Brigade|Bde|CC[ABR]|Command/.test(G.n) ? 'X' : G.role === 'man' || G.role === 'arty' ? 'III' : 'II', lbl(q, G.n.replace(/\b(\w+)( \1)+\b/g, '$1').replace(/Infantry Brigade/, 'Bde').replace(/Armoured Brigade/, 'Armd Bde').replace(/Grenadier-Regiment/, 'GR').replace(/Panzergrenadier-Regiment/, 'PzGR').replace(/Panzer-Regiment/, 'PzR').replace(/Division Artillery|Royal Artillery|.*Artillerie-Regiment/, 'Arty').replace(/Division troops|Divisionstruppen/, 'Troops').replace(/ Infantry$/, ' Inf').slice(0, 14)), gs, selOf(F), own); R.hits.push([us[0], q[0], q[1], F, G, us]); } }
+     if (!lod) for (const u of S.subs) { if (!u.active || u.dead || !u.vis) continue; const v = R.visOf(u); if (!v) continue; const p = R.project(v.hx, v.hz, u.mv === 'ship' ? .5 : up); if (!p || p[0] < -30 || p[0] > W + 30 || p[1] < -30 || p[1] > H + 30) continue; counter(u, p[0], p[1], k, R.sel === u.f, mine(u.s), alpha); R.hits.push([u, p[0], p[1]]); }
+     if (R.sel && R.sel.active && (mine(R.sel.s) || R.sel.subs.some(u => u.vis && !u.dead))) { const F = R.sel, p = R.project(F.cx, F.cy, .6); if (p) text(F.n, p[0], p[1] - 16, '#111', 13, true, 'center'); }
+     for (const f of S.flights) { if (f.st === 'gone' || (!mine(f.s) && cam.dist > 70)) continue; const p = R.project3(f.x, R.hy(clamp(f.x, 0, map.w), clamp(f.y, 0, map.h)) + (f.alt || 1.5) + .25, f.y); if (p && cam.dist > 18) text(f.ac[0].split(' ')[0] + ' x' + f.n, p[0], p[1], f.s ? '#7a2a22' : '#2a4a7a', 10, true, 'center'); }
+diff --git a/engine/src/sim.js b/engine/src/sim.js
+index 734831e..231b4df 100644
+--- a/engine/src/sim.js
++++ b/engine/src/sim.js
+@@ -148,12 +148,13 @@ function createSim(sc, player, seed, opt) {
+   }
+   function segX(a, b, c, d) { const rx = b[0] - a[0], ry = b[1] - a[1], sx = d[0] - c[0], sy = d[1] - c[1], den = rx * sy - ry * sx; if (Math.abs(den) < 1e-9) return null; const t = ((c[0] - a[0]) * sy - (c[1] - a[1]) * sx) / den, u = ((c[0] - a[0]) * ry - (c[1] - a[1]) * rx) / den; if (t < 0 || t > 1 || u < 0 || u > 1) return null; return [a[0] + rx * t, a[1] + ry * t, u]; }
+   // friendly lines of advance that the path P would cross (ahead of the other formation's present position)
++  const CROSS_COS = Math.cos(35 * Math.PI / 180);   // routes within 35 degrees of the same direction do not count as crossing
+   S.crossings = function (F, P, skip) {   // skip: formations whose orders are being replaced by the same corps order (fix A3)
+     const out = [];
+     for (const G of S.forms) {
+       if (G === F || (skip && skip.has(G)) || G.s !== F.s || !G.active || G.dead || !G.order) continue; const O = G.order; if ((O.st !== 'active' && O.st !== 'pending') || O.L < 1.5 || O.prog >= O.L - .5) continue;
+       let acc = 0, hit = null;
+-      for (let j = 1; j < O.path.length && !hit; j++) { const c = O.path[j - 1], d = O.path[j], l = Math.hypot(d[0] - c[0], d[1] - c[1]); for (let i = 1; i < P.length; i++) { const x = segX(P[i - 1], P[i], c, d); if (!x || acc + x[2] * l < O.prog + .3 || Math.hypot(x[0] - P[0][0], x[1] - P[0][1]) < .8) continue; hit = { G, x: x[0], y: x[1] }; break; } acc += l; }
++      for (let j = 1; j < O.path.length && !hit; j++) { const c = O.path[j - 1], d = O.path[j], l = Math.hypot(d[0] - c[0], d[1] - c[1]); for (let i = 1; i < P.length; i++) { const x = segX(P[i - 1], P[i], c, d); if (!x || acc + x[2] * l < O.prog + .3 || Math.hypot(x[0] - P[0][0], x[1] - P[0][1]) < .8) continue; { const ux = P[i][0] - P[i - 1][0], uy = P[i][1] - P[i - 1][1], vx = d[0] - c[0], vy = d[1] - c[1], uu = Math.hypot(ux, uy) * Math.hypot(vx, vy); if (uu > 0 && (ux * vx + uy * vy) / uu > CROSS_COS) continue; } /* columns on the same road heading the same way follow one another: road sharing slows them, they do not cross */  hit = { G, x: x[0], y: x[1] }; break; } acc += l; }
+       if (hit) out.push(hit);
+     }
+     return out;
+@@ -161,7 +162,7 @@ function createSim(sc, player, seed, opt) {
+   S.issueOrder = function (F, path, line, opt) {
+     opt = opt || {}; if (F.s === player) { const L = line && line.length ? line : path; if (L && L.length) { let mx = 0, my = 0; for (const q of L) { mx += q[0]; my += q[1]; } mx /= L.length; my /= L.length; if (S.haltBlock(F, mx, my)) { say(F, sc.halt.why, 2); F.status = 'Held at the army group boundary'; return 'halt'; } } }
+     const pend = F.order && F.order.st === 'pending', prev = F.order && F.order.st === 'active' && F.order.L > 1, pendLeft = pend ? Math.max(0, F.order.t0 - S.t) : 0;
+-    const O = mkOrder(F, path, line); let delay = 0; O.then = THEN[opt.then] ? opt.then : null; O.forH = opt.forH > 0 ? +opt.forH : 0; O.ext = opt.ext || 0; O.own = !!opt.own; O.stretch = !!opt.stretch; O.press = opt.press >= 0 && opt.press <= 3 ? opt.press | 0 : 1;
++    const O = mkOrder(F, path, line); let delay = 0; O.then = THEN[opt.then] ? opt.then : null; O.forH = opt.forH > 0 ? +opt.forH : 0; O.ext = opt.ext || 0; O.own = !!opt.own; O.stretch = !!opt.stretch; O.byCmd = !!opt.byCmd; O.press = opt.press >= 0 && opt.press <= 3 ? opt.press | 0 : 1;
+     if (!S.planning && !opt.free) { delay = (25 + 70 * (1 - F.cmd.sk)) * (DOCT[F.nat] || DOCT.US).delay * (prev ? 1.6 : 1) * (F.s === player ? DF.delay : 1) * (1 + (rnd() - .3) * .25 * VR); if (prev) { F.dis = Math.min(1, F.dis + .15); for (const u of alive(F)) u.coh = Math.max(.15, u.coh - .08); } if (F.post === 'reserve') delay *= .5; else if (F.post === 'dig') delay += 20; }
+     const X = S.crossings(F, O.path, opt.sisters); O.cross = X; if (X.length) { delay += Math.min(60, 30 * X.length); F.dis = Math.min(1, F.dis + .25); for (const q of X) { q.G.dis = Math.min(1, q.G.dis + .25); q.G.jamT = Math.max(q.G.jamT, S.t + 30); say(F, 'Our line of advance crosses that of ' + q.G.n + ' ' + nearTown(q.x, q.y) + '. Both columns will be delayed and disordered.', 2, q.x, q.y); } }
+     O.t0 = S.t + delay; F.order = O; F.post = null; F.halt = false; F.assaultT = 0; F.bridge = null; F.needEng = false; F.haltT = 0;
+@@ -375,11 +376,11 @@ function createSim(sc, player, seed, opt) {
+   }
+   function bridging(F, O) {
+     const f = polyAt(O.path, Math.min(O.L, O.prog + 2)); const b = nearBridge(f.x, f.y, O);
+-    if (!b) { if (aiF(F) && S.t > (F.xTryT || 0)) { F.xTryT = S.t + 360; const X = S.cross(F, f.x, f.y); if (X && typeof X === 'object') { F.status = 'Assault crossing'; O.bestT = S.t; return; } }   // the staff puts the battalions over in boats
++    if (!b) { if ((aiF(F) || O.byCmd) && S.t > (F.xTryT || 0)) { F.xTryT = S.t + 360; const X = S.cross(F, f.x, f.y); if (X && typeof X === 'object') { F.status = 'Assault crossing'; O.bestT = S.t; return; } }   // the staff puts the battalions over in boats
+       if (S.t > F.msgT) { const m = polyAt(O.line, polyLen(O.line) / 2), n = Math.max(1, Math.ceil(Math.hypot(m.x - F.cx, m.y - F.cy) / .4)); let riv = false; for (let k = 0; k <= n && !riv; k++) riv = map.t[map.idx(F.cx + (m.x - F.cx) * k / n, F.cy + (m.y - F.cy) * k / n)] === T.RIVER;   // say what bars the way (fix A6)
+         say(F, 'No route forward from ' + nearTown(F.cx, F.cy) + (riv ? ': the river bars the way and no bridge on our route is open. Draw the line over a bridge we hold, or order an assault crossing.' : ': no passable road or ground leads to the objective.'), 2); F.msgT = S.t + 720; } O.bestT = S.t; F.status = 'Halted: no route'; return; }
+     const eng = field(F).find(u => u.cls === 'eng');
+-    if (!eng && aiF(F) && S.t > (F.xTryT || 0)) { F.xTryT = S.t + 360; const X = S.cross(F, b.x, b.y); if (X && typeof X === 'object') { F.status = 'Assault crossing'; O.bestT = S.t; return; } }   // no engineers: the staff tries the boats
++    if (!eng && (aiF(F) || O.byCmd) && S.t > (F.xTryT || 0)) { F.xTryT = S.t + 360; const X = S.cross(F, b.x, b.y); if (X && typeof X === 'object') { F.status = 'Assault crossing'; O.bestT = S.t; return; } }   // no engineers: the staff tries the boats
+     if (!eng) { F.needEng = true; F.status = 'Halted: ' + b.name + ' is down'; if (S.t > F.msgT) { say(F, 'The ' + b.name + ' is down. We need engineers attached to bridge it.', 2, b.x, b.y); F.msgT = S.t + 720; } return; }
+     if (F.bridge !== b) say(F, 'Engineers moving up to bridge the gap at the ' + b.name + '.', 1, b.x, b.y);
+     F.bridge = b; F.status = 'Bridging at ' + b.name; O.bestT = S.t;
+@@ -674,17 +675,25 @@ function createSim(sc, player, seed, opt) {
+     // computer staffs ask for drops for cut-off formations short of supply
+     for (let s = 0; s < 2; s++) if (S.ai[s] && S.lift[s].left >= 1) { const F = S.forms.find(G => G.s === s && G.active && !G.dead && G.isolated && G.stock < G.cap * .3 && !S.dropQ[s].some(q => q.F === G)); if (F) { const h = F.hq && !F.hq.dead ? F.hq : { x: F.cx, y: F.cy }; S.reqDrop(s, F, h.x, h.y); } }
+   }
++  // reachable regions for supply columns (truck moves, this side's block mask), labelled at most once per supply tick per side when a column is planned
++  const CC = [{ t: -1, lab: null }, { t: -1, lab: null }], colComp = s => { const q = CC[s]; if (q.t !== S.t) { q.lab = map.compLabel(1, S.zoc[s], q.lab); q.t = S.t; } return q.lab; };
+   function supplyTick() {
+     moraleTick(); dropTick();
+-    for (let s = 0; s < 2; s++) { const z = S.zoc[s]; z.fill(0); for (let j = 0; j < map.H; j++) for (let i = 0; i < map.W; i++) if (S.ownAt((i + .5) * map.cs, (j + .5) * map.cs) !== s) z[j * map.W + i] = 1; const r = Math.ceil(1.2 / map.cs); for (const e of S.subs) if (e.s !== s && e.active && !e.dead && e.cls !== 'hq' && e.cls !== 'art' && e.coh > .2) { const ci = Math.floor(e.x / map.cs), cj = Math.floor(e.y / map.cs); for (let dj = -r; dj <= r; dj++) for (let di = -r; di <= r; di++) { const i = ci + di, j = cj + dj; if (i >= 0 && j >= 0 && i < map.W && j < map.H && di * di + dj * dj <= r * r) z[j * map.W + i] = 1; } } }
++    const M = m2o(), OA = OW.a; for (let s = 0; s < 2; s++) { const z = S.zoc[s]; z.fill(0); for (let c = 0; c < map.N; c++) if (OA[M[c]] !== s) z[c] = 1; const r = Math.ceil(1.2 / map.cs); for (const e of S.subs) if (e.s !== s && e.active && !e.dead && e.cls !== 'hq' && e.cls !== 'art' && e.coh > .2) { const ci = Math.floor(e.x / map.cs), cj = Math.floor(e.y / map.cs); for (let dj = -r; dj <= r; dj++) for (let di = -r; di <= r; di++) { const i = ci + di, j = cj + dj; if (i >= 0 && j >= 0 && i < map.W && j < map.H && di * di + dj * dj <= r * r) z[j * map.W + i] = 1; } } }
+     // battalion-level supply: the ground each side can reach, avoiding the enemy's immediate reach (1.2 km round his troops) and water with no bridge.
+     // A battalion draws supply only if the ground round it (1.2 km) joins the ground round its headquarters.
+     for (let s = 0; s < 2; s++) { const zE = S.zE[s], lab = S.lab[s]; zE.fill(0); lab.fill(0); const r = Math.ceil(1.2 / map.cs);
+       for (const e of S.subs) if (e.s !== s && e.active && !e.dead && e.cls !== 'hq' && e.cls !== 'art' && e.coh > .2 && e.mv !== 'ship') { const ci = Math.floor(e.x / map.cs), cj = Math.floor(e.y / map.cs); for (let dj = -r; dj <= r; dj++) for (let di = -r; di <= r; di++) { const i = ci + di, j = cj + dj; if (i >= 0 && j >= 0 && i < map.W && j < map.H && di * di + dj * dj <= r * r) zE[j * map.W + i] = 1; } }
+       // ground the enemy owns blocks the link too, as it does for supply columns
+-      for (let c = 0; c < map.N; c++) if (!zE[c] && S.ownAt((c % map.W + .5) * map.cs, (((c / map.W) | 0) + .5) * map.cs) === 1 - s) zE[c] = 1;
+-      let n = 0; const st = []; for (let c = 0; c < map.N; c++) { if (lab[c] || zE[c] || map.fac[0][c] <= 0) continue; n++; lab[c] = n; st.push(c); while (st.length) { const q = st.pop(), i = q % map.W, j = (q / map.W) | 0; if (i > 0) vis(q - 1); if (i < map.W - 1) vis(q + 1); if (j > 0) vis(q - map.W); if (j < map.H - 1) vis(q + map.W); } }
+-      function vis(c) { if (!lab[c] && !zE[c] && map.fac[0][c] > 0) { lab[c] = n; st.push(c); } } }
++      for (let c = 0; c < map.N; c++) if (!zE[c] && OA[M[c]] === 1 - s) zE[c] = 1;
++      // connected regions, numbered in scan order as before; an explicit typed stack and inline neighbour tests for speed
++      const W = map.W, N = map.N, F0 = map.fac[0], ST = S.labSt || (S.labSt = new Int32Array(N + 8));
++      let n = 0; for (let c = 0; c < N; c++) { if (lab[c] || zE[c] || F0[c] <= 0) continue; n++; lab[c] = n; let sp = 0; ST[sp++] = c;
++        while (sp) { const q = ST[--sp], i = q % W; let k;
++          if (i > 0) { k = q - 1; if (!lab[k] && !zE[k] && F0[k] > 0) { lab[k] = n; ST[sp++] = k; } }
++          if (i < W - 1) { k = q + 1; if (!lab[k] && !zE[k] && F0[k] > 0) { lab[k] = n; ST[sp++] = k; } }
++          if (q >= W) { k = q - W; if (!lab[k] && !zE[k] && F0[k] > 0) { lab[k] = n; ST[sp++] = k; } }
++          if (q < N - W) { k = q + W; if (!lab[k] && !zE[k] && F0[k] > 0) { lab[k] = n; ST[sp++] = k; } } } } }
+     const near = (s, x, y) => { const out = new Set(), lab = S.lab[s], r = Math.ceil(1.2 / map.cs), ci = Math.floor(x / map.cs), cj = Math.floor(y / map.cs); for (let dj = -r; dj <= r; dj++) for (let di = -r; di <= r; di++) { const i = ci + di, j = cj + dj; if (i >= 0 && j >= 0 && i < map.W && j < map.H && di * di + dj * dj <= r * r && lab[j * map.W + i]) out.add(lab[j * map.W + i]); } return out; };
+     // a formation that has lost its headquarters links instead to the side's own network: another headquarters that is not cut off, or a working supply source
+     const net = [null, null], netOf = s => { if (net[s]) return net[s]; const o = new Set(), add = (x, y) => { for (const l of near(s, x, y)) o.add(l); };
+@@ -725,7 +734,7 @@ function createSim(sc, player, seed, opt) {
+         const pr = S.supPrio(F), bad = F.badSrc && S.t < F.badSrc.until ? F.badSrc.src : null, list = S.src[F.s].filter(q => !q.captured && q.stock >= (pr < 0 ? Math.max(1, q.cap * .35) : 1) && S.t >= q.t * 60).sort((a, b) => (a === bad) - (b === bad) || Math.hypot(a.x - hx, a.y - hy) - Math.hypot(b.x - hx, b.y - hy));
+         let sent = false;
+         // a headquarters within 3 km of its own beach or depot draws straight from it
+-        for (const q of list.slice(0, 3)) { const p = Math.hypot(q.x - hx, q.y - hy) < 3 ? [[q.x, q.y], [hx, hy]] : map.findPath(1, q.x, q.y, hx, hy, { block: S.zoc[F.s], grad: 3, road: q.air ? 0 : ROADBIAS }); if (p) { const off = q.air ? 0 : p.off || 0, rm = off <= OFFFREE ? 1 : Math.max(OFFMIN, 1 - OFFSLOPE * (off - OFFFREE)); F.offRd = off; F.offMul = rm;   // the last stretch off the road cuts what a column can carry
++        for (const q of list.slice(0, 3)) { const p = Math.hypot(q.x - hx, q.y - hy) < 3 ? [[q.x, q.y], [hx, hy]] : map.findPath(1, q.x, q.y, hx, hy, { block: S.zoc[F.s], grad: 3, road: q.air ? 0 : ROADBIAS, comp: colComp(F.s) }); if (p) { const off = q.air ? 0 : p.off || 0, rm = off <= OFFFREE ? 1 : Math.max(OFFMIN, 1 - OFFSLOPE * (off - OFFFREE)); F.offRd = off; F.offMul = rm;   // the last stretch off the road cuts what a column can carry
+             if (rm >= 1) F.offMsgR = null; else if (S.t > (F.offMsgT || 0) && (F.offMsgR == null || rm < F.offMsgR - .1)) { F.offMsgT = S.t + 720; F.offMsgR = rm; say(F, 'Supply columns must drive ' + Math.round(off) + ' km off the road to reach us. Loads are down to ' + Math.round(rm * 100) + ' percent.', 1); }
+             const load = Math.min(q.stock, F.cap - F.stock, 10 * rm * (pr > 0 ? 1.3 : pr < 0 ? .7 : 1)); q.stock -= load; F.supPath = p; const c = { id: S.nid++, s: F.s, F, src: q, path: p, pi: 1, x: p[0][0], y: p[0][1], hx: 1, hy: 0, load, load0: load, st: 'out', dead: false, trail: [] }; S.convoys.push(c); F.convoy = c; sent = true; break; } }
+         F.convT = S.t + (sent ? 20 : 60);
+@@ -1223,6 +1232,8 @@ function createSim(sc, player, seed, opt) {
+   // Objectives: whoever takes an objective takes the ground within 1 km of it.
+   // Consolidation (every hour): ground no one stands on goes to the side holding most of the ground around it, so bypassed pockets and salients fill in.
+   const OW = (() => { const cw = sc.ownCell || .5, gw = Math.ceil(map.w / cw), gh = Math.ceil(map.h / cw); return { cw, gw, gh, a: new Uint8Array(gw * gh), pres: [new Uint8Array(gw * gh), new Uint8Array(gw * gh)] }; })();
++  // map cell -> ownership cell, built once: lets map-wide loops read the owner of every map cell without a function call per cell
++  let M2O = null; const m2o = () => M2O || (M2O = (() => { const z = new Int32Array(map.N); for (let c = 0; c < map.N; c++) { const x = (c % map.W + .5) * map.cs, y = (((c / map.W) | 0) + .5) * map.cs; z[c] = clamp(Math.floor(y / OW.cw), 0, OW.gh - 1) * OW.gw + clamp(Math.floor(x / OW.cw), 0, OW.gw - 1); } return z; })());
+   S.own = OW; S.ownAt = (x, y) => OW.a[clamp(Math.floor(y / OW.cw), 0, OW.gh - 1) * OW.gw + clamp(Math.floor(x / OW.cw), 0, OW.gw - 1)];
+   function disc(x, y, r, fn) { const c = OW.cw, i0 = Math.max(0, Math.floor((x - r) / c)), i1 = Math.min(OW.gw - 1, Math.floor((x + r) / c)), j0 = Math.max(0, Math.floor((y - r) / c)), j1 = Math.min(OW.gh - 1, Math.floor((y + r) / c)); for (let j = j0; j <= j1; j++) for (let i = i0; i <= i1; i++) if (Math.hypot((i + .5) * c - x, (j + .5) * c - y) <= r) fn(j * OW.gw + i); }
+   const formed = u => u.active && !u.dead && u.coh > .3 && u.cls !== 'hq' && u.mv !== 'ship' && u.state !== 'retreat' && !(u.f.arr && !u.f.active);
+@@ -1233,10 +1244,17 @@ function createSim(sc, player, seed, opt) {
+   }
+   function ownTick(hourly) {
+     // each cell within reach of troops in fighting order goes to the side whose troops are nearest (artillery reaches 0.8 km, other units 1.5 km)
+-    const P = OW.pres, D = OW.dist || (OW.dist = [new Float32Array(OW.a.length), new Float32Array(OW.a.length)]); P[0].fill(0); P[1].fill(0); D[0].fill(99); D[1].fill(99);
+-    const R0 = sc.ownR || 1.5;   // reach of a unit's hold on the ground (km); division-scale scenarios set more (game setting)
+-    for (const u of S.subs) if (formed(u)) { const r = u.cls === 'art' ? R0 * .55 : R0, dd = D[u.s], pp = P[u.s], lead = LEADCLS[u.cls] || u.cls === 'at' || u.cls === 'eng'; disc(u.x, u.y, R0, c => { const i = c % OW.gw, j = (c / OW.gw) | 0, d = Math.hypot((i + .5) * OW.cw - u.x, (j + .5) * OW.cw - u.y) + R0 - r; if (d < dd[c]) dd[c] = d; if (lead && d < 1.2) pp[c] = 1; }); }
+-    for (let c = 0; c < OW.a.length; c++) { const a = D[0][c], b = D[1][c]; if (Math.min(a, b) <= R0 && a !== b && !(OW.sea && OW.sea[c])) OW.a[c] = a < b ? 0 : 1; }
++    // only cells within reach of a unit can change, so the work runs over those cells alone: the cells touched last time are reset,
++    // this time's are listed as they are reached (same results as clearing and scanning the whole grid)
++    const NC = OW.a.length, P = OW.pres, D = OW.dist || (OW.dist = [new Float32Array(NC).fill(99), new Float32Array(NC).fill(99)]), TL = OW.tl || (OW.tl = new Int32Array(NC)), MK = OW.mk || (OW.mk = new Uint8Array(NC));
++    for (let k = 0; k < (OW.nt || 0); k++) { const c = TL[k]; D[0][c] = 99; D[1][c] = 99; P[0][c] = 0; P[1][c] = 0; MK[c] = 0; }
++    let nt = 0; const R0 = sc.ownR || 1.5, cw = OW.cw, gw = OW.gw, gh = OW.gh;   // R0: reach of a unit's hold on the ground (km); division-scale scenarios set more (game setting)
++    for (const u of S.subs) if (formed(u)) { const r = u.cls === 'art' ? R0 * .55 : R0, dd = D[u.s], pp = P[u.s], lead = LEADCLS[u.cls] || u.cls === 'at' || u.cls === 'eng', x = u.x, y = u.y;
++      const i0 = Math.max(0, Math.floor((x - R0) / cw)), i1 = Math.min(gw - 1, Math.floor((x + R0) / cw)), j0 = Math.max(0, Math.floor((y - R0) / cw)), j1 = Math.min(gh - 1, Math.floor((y + R0) / cw));
++      for (let j = j0; j <= j1; j++) for (let i = i0; i <= i1; i++) { const hd = Math.hypot((i + .5) * cw - x, (j + .5) * cw - y); if (hd > R0) continue;
++        const c = j * gw + i, d = hd + R0 - r; if (!MK[c]) { MK[c] = 1; TL[nt++] = c; } if (d < dd[c]) dd[c] = d; if (lead && d < 1.2) pp[c] = 1; } }
++    OW.nt = nt; const SEA0 = OW.sea;
++    for (let k = 0; k < nt; k++) { const c = TL[k], a = D[0][c], b = D[1][c]; if (Math.min(a, b) <= R0 && a !== b && !(SEA0 && SEA0[c])) OW.a[c] = a < b ? 0 : 1; }
+     if (!hourly) return; const g = OW.gw, h = OW.gh;
+     if (sc.ownMax) frontTick(g, h);
+     const b = OW.a.slice();
+diff --git a/engine/src/transport.js b/engine/src/transport.js
+index 5a32bfc..27b07fb 100644
+--- a/engine/src/transport.js
++++ b/engine/src/transport.js
+@@ -13,6 +13,7 @@ const TRANSPORT = {
+   railLoadMin: 240, railUnloadMin: 180,
+   minAdminKm: 12,                     // shorter moves stay tactical
+   minRailKm: 30,                      // rail is not worth loading for less
++  railFrontKm: 15,                    // trains unload at least this far from enemy-held ground: a move toward battle ends on foot or by road
+   stationKm: 6, exitKm: 8,            // reach from a unit to a station or road, and from the release point to the road
+   safetyKm: 6, safetySkillKm: 6,      // distance kept from known enemy: 6 km plus up to 6 km for a less skilled commander
+   colKmMotor: .8, colKmFoot: .5,      // column length per unit
+@@ -26,6 +27,8 @@ const TRANSPORT = {
+ };
+ function attachTransport(S) {
+   const map = S.map, sc = S.sc, T0 = TRANSPORT;
++  // enemy-held ground within r km of a point (sampled every 2.5 km)
++  const nearFoe = (s, x, y, r) => { for (let dy = -r; dy <= r; dy += 2.5) for (let dx = -r; dx <= r; dx += 2.5) { if (dx * dx + dy * dy > r * r) continue; const qx = x + dx, qy = y + dy; if (qx < 0 || qy < 0 || qx >= map.w || qy >= map.h) continue; const o = S.ownAt(qx, qy); if (o != null && o !== s && map.tAt(qx, qy) !== T.SEA) return true; } return false; };
+   // ---------- the network ----------
+   const net = { x: [], y: [], adj: [], kind: [], station: [], key: new Map() };
+   const K = (x, y) => Math.round(x / .25) + ',' + Math.round(y / .25);
+@@ -88,7 +91,7 @@ function attachTransport(S) {
+     let rail = null; if ((sc.rails || []).length && inUse(F.s, 'rail') < (side.trains == null ? 2 : side.trains)) { const s0 = nearest(from[0], from[1], 'rail', T0.stationKm);
+       if (s0 >= 0) { const t = tree(s0, () => T0.railKmh, safe), s1 = bestExit(t, tx, ty);
+         if (s1 >= 0) { const r = trace(t, s1), ramps = net.station[s0] ? 1 : 1.5, rampsOut = net.station[s1] ? 1 : 1.5;
+-          if (r.km >= T0.minRailKm && d0 - Math.hypot(net.x[s1] - tx, net.y[s1] - ty) >= T0.minAdminKm) rail = { mode: 'rail', r, rel: { x: net.x[s1], y: net.y[s1] }, from, ramps, rampsOut,
++          if (r.km >= T0.minRailKm && d0 - Math.hypot(net.x[s1] - tx, net.y[s1] - ty) >= T0.minAdminKm && !nearFoe(F.s, net.x[s1], net.y[s1], T0.railFrontKm)) rail = { mode: 'rail', r, rel: { x: net.x[s1], y: net.y[s1] }, from, ramps, rampsOut,
+             hours: (T0.railLoadMin * ramps + T0.railUnloadMin * rampsOut) / 60 + r.hours + Math.hypot(net.x[s1] - tx, net.y[s1] - ty) / tacKmh }; } } }
+     if (rail && (!road || rail.hours < road.hours)) return rail;
+     return road;

@@ -1,6 +1,6 @@
 # Engine fixes for france-1944, from the Sarn Corridor build
 
-Tov Binyamin Brog · 24 November 2026 (version 4: adds fix 7, with its own patch against the current france-1944 code)
+Tov Binyamin Brog · 24 November 2026 (version 5: adds fix 8, with its own patch against france-1944 commit a8c8ed4)
 
 Instructions for the france-1944 build. Apply the patch at the end of this document (also at https://raw.githubusercontent.com/tovbrog-pixel/sarn-corridor/main/docs/engine-fixes-for-france-1944.patch). It changes `engine/src/sim.js`, `engine/src/command.js`, `engine/src/map.js` and `engine/src/ui.js` and adds `engine/src/doctrine.js`. The Sarn Corridor build also has H-hour, pre-war intelligence and deployment variants; they are left out here because the France campaign uses historical deployments. Then make the three loader edits, set the scenario values below and test. The patch was checked against france-1944 commit 5c5182b with `git apply --check`; if the files have changed since, apply the changes by hand from the descriptions.
 
@@ -75,6 +75,44 @@ At regiment zoom, divisions that sit within a few kilometres of each other print
 
 Both parts come in a separate patch, `engine-fixes-for-france-1944-fix7.patch`, made against france-1944 commit 9d6a703, after fixes 1 to 6 went in (commit fe9e060). It changes `engine/src/render3.js` and `engine/src/sim.js`. The France regression suite matches the existing baseline with it applied, so no new baselines are needed.
 
+### 8. Slow turns on the Overlord map, commanders who churn their divisions, and trains that run into the battle
+
+Three play rounds of Sarn Corridor on 24 Nov 2026 found these. Tov's saved game of 22 Jun 1940 (seed 2237) was replayed order by order: in the first 200 hours the corps commanders gave 205 orders on their own (93 rest, 88 hold, 24 reserve), and divisions turned back 30 times. Each stalled attack brought a relief, and 12 hours later the pair swapped back.
+
+The fix comes in four parts, in one patch, `engine-fixes-for-france-1944-fix8.patch`, made against france-1944 commit a8c8ed4. It changes `command.js`, `doctrine.js`, `map.js`, `render.js`, `render3.js`, `sim.js` and `transport.js`.
+
+**8a. Speed, with the same results.** Regression matched the France baseline with this part alone.
+- Held ground (`ownTick`) updates only the cells within reach of a unit, and resets only the cells it touched last time.
+- A map-cell-to-ownership index (`m2o`), built once, replaces a function call per cell in the supply loops.
+- A supply column skips a route search that cannot reach its headquarters (`map.compLabel`, `canReach`, `opt.comp`).
+- The route search reads its distance estimate from a table (`htab`), and the supply flood uses a typed stack.
+
+On Overlord, a week of play (168 game hours) took 346 s against 466 s for seed 7, and 354 s against 513 s for seed 8. Both builds ended with the same objectives and losses.
+
+**8b. Orders.**
+- **Relief:** a corps commander commits his reserve only when a forward division is spent or lost. A stalled division keeps its sector, and the commander reports the stall once. A relieved division rests 24 hours (`CMDAI.restMin`) before it can be committed again. This replaces the relieve-once rule of fix A2, and the reserve-kept rule of fix A1 now holds for every stall. On Tov's replay the commander orders fell from 205 to between 51 and 71, and reversals from 30 to between 2 and 5.
+- **Waiting is not stalling:** a division at a river (boats, a bridge, no route) or halted on purpose for its neighbours or its flank (`alignHold`, `flankHold`) no longer counts as stalled. A division counts as arrived when its own order is complete, or within 2.5 km of the objective (`onObjKm`, 1.5 before).
+- **Army orders:** the axis runs square to the objective line. An army keeps its frontage: an objective shorter than the army's spread runs on to cover it, so the flank formations go straight ahead. A corps line widens only to the room its divisions need (`kmPerBn`, 0.45 km per leading battalion). A corps standing more than 15 km behind the others (`echelonKm`) follows as second echelon, on a route that first runs behind the line of departure. A corps standing more than 15 km beyond the objective keeps its present orders, and the order note says so. In this port the square axis applies to army orders only: on corps orders it changed the tutorial run from Blue 50, Red 30 to Blue 30, Red 50, with Hartsville lost.
+- **River assaults under orders:** divisions under corps or army orders (`byCmd`) put their battalions over in assault boats as computer-run divisions do. With the doctrine module on, `xingTick` starts an assault when the division's axis meets a river within 6 km and no intact bridge stands within 8 km. A division under the player's direct order still waits for the Cross order.
+- **Route crossings:** two routes within 35 degrees of the same direction (columns sharing a road) no longer count as crossing (`CROSS_COS` in `S.crossings`). This changes results in most scenarios.
+
+**8c. Rail.** Trains unload at least 15 km from enemy-held ground (`TRANSPORT.railFrontKm`), so a move toward the battle ends by road or on foot. The rail case in `tools/test-transport2.js` now goes by truck, because its release point lies within 15 km of German ground. Move that test's objective farther back, or lower `railFrontKm` if 15 km proves too far for Normandy railheads.
+
+**8d. Display.** These change no results.
+- The staff map shows ground the player holds as his. Before, stale cells from the start of the game showed as enemy islands behind the line.
+- Trains: a two-car glyph with the camera over 150 km out, four cars from 60 to 150 km, the full train closer in.
+- Supply convoys: closer than 8 km the trucks show as models and the map symbol gives way to the load label.
+- Selecting a division outlines the other divisions of its corps in a softer yellow.
+
+Left out because France has no use for them: the pre-war intelligence strike-off, the map generator, the regiment-level test and the town radius.
+
+**Tests on france-1944 with fix 8 applied:**
+- `tools/regress.js`: salerno, marketgarden, bastogne, falaise, gazala and sicily change, and the other three scenarios match. Record the baselines again.
+- `tools/test-command.js`: all A1 and A2 cases pass with no route crossings. The 358th Infantry now holds near Alencon, where before it halted with no route. In the jumbled case drawn toward Bellwood, the reserve is now 3rd Infantry Division (2nd before).
+- `tools/tutorial-run.js`: the same result as before, Blue 50, Red 30, Carthage taken at hour 6.5.
+- `tools/test-transport.js` unchanged; `tools/test-transport2.js` as noted in 8c.
+- The Falaise page, built with the patch, loads and runs 4 game hours in headless Chrome with no page errors.
+
 ## Scenario settings to try for Overlord
 
 All values are starting points for balance testing. Each is a game setting; none comes from a source. Add them to the scenario object in `tools/scenario-overlord.js`:
@@ -96,6 +134,7 @@ Add `'ownR', 'ownMax', 'isoShrinkKm', 'corpsPlan'` to the `keep` list in `tools/
 5. Look at the held-ground layer (key T) in the game around the Cotentin, Brest and the Falaise pocket, where coastal and inland pockets form.
 6. Watch a corps attack: divisions should leave the roads near the enemy, halt at bounds for lagging neighbours, and Third Army's armoured divisions should halt and call infantry forward when their flanks open too far.
 7. Fix 7, on a build that already has fixes 1 to 6: save the fix 7 patch at the end of this document as `fix7.patch` and run `git apply fix7.patch` (also at https://raw.githubusercontent.com/tovbrog-pixel/sarn-corridor/main/docs/engine-fixes-for-france-1944-fix7.patch). Run `node tools/regress.js`; it should match the baseline. Then check the starting positions at regiment zoom and add `stretch: 1` to any division that bunches in the middle of a historical sector.
+8. Fix 8, on a build at commit a8c8ed4: download https://raw.githubusercontent.com/tovbrog-pixel/sarn-corridor/main/docs/engine-fixes-for-france-1944-fix8.patch as `fix8.patch` and run `git apply fix8.patch`. Run `node tools/regress.js record`, since the crossing filter and the order changes alter results. Fix the rail case in `tools/test-transport2.js` (8c). Then run the 20-game batch and compare capture dates and losses with batch 19, and watch an army order and a stalled corps attack in the game.
 
 ## Patch
 
@@ -396,4 +435,5 @@ index b59ca84..3563f3b 100644
 - **Patch:** a diff of the Sarn Corridor engine files against france-1944 commit 5c5182b, plus the new `doctrine.js`, with the H-hour, intelligence and variant code removed; the France version saves stop settings under `f44_stop`. Checked with `git apply --check` on 24 Nov 2026.
 - **Doctrine sources:** [FM 100-5, 1941, ch. 8](https://ibiblio.org/hyperwar/USA/ref/FM/FM100-5/FM-100-5-8.html) (pars. 355, 364-366), [ch. 9](https://ibiblio.org/hyperwar/USA/ref/FM/FM100-5/FM-100-5-9.html) (pars. 456-457, 475), [ch. 15](https://ibiblio.org/hyperwar/USA/ref/FM/FM100-5/FM-100-5-15.html); German practice: [Lone Sentry, Basic Infantry Tactics](https://lonesentry.com/articles/intelligence-report/basic-infantry-tactics.html) and [German Infantry Tactics 1932-1945](https://www.miniatures.de/tactics-1932-german-infantry.html); Soviet division sector: [Glantz, CSI](https://webharvest.gov/peth04/20041015022815/http://www.cgsc.army.mil/carl/download/csipubs/glantz2.pdf); 1940 and 1941 corridors: [WarHistory, Sickle Cut III](https://warhistory.org/article/sickle-cut-through-france-iii), [With the Ghost Division](https://warhistory.org/de/article/with-the-ghost-division?amp=0), [Armored Forces of Barbarossa II](https://warhistory.org/article/armored-forces-of-barbarossa-ii?amp=0), [Kamenir, Smolensk](https://warfarehistorynetwork.com/article/operation-barbarossa-holding-the-line-at-smolensk/), all read 24 Nov 2026.
 - **Fix 7:** found on 24 Nov 2026 in Tov's review of four zoom screenshots of the Sarn Corridor deployment. The patch is a diff against france-1944 commit 9d6a703, checked with `git apply --check`, and `node tools/regress.js` matched all nine baseline scenarios with it applied.
-- **Inference:** problem 1 almost certainly exists in france-1944, since the code is the same, but this has not been tested on the Overlord map. Whether any Overlord division actually bunches at the start is untested; the German coastal divisions are named as likely cases only. All setting values, including the doctrine distances (15 km development, 8 km bounds, 10 km plus 4 km per battalion of flank guard), are game settings for balance testing drawn from the doctrine above, untested on the Overlord map.
+- **Fix 8:** found in Sarn Corridor play on 24 Nov 2026, from Tov's screenshots and his saved game of 22 Jun 1940, replayed on the engine he played (Sarn commit 6c310b3) and on the fixed engine (c3fe98c). The patch is a diff against france-1944 commit a8c8ed4, checked with `git apply --check`; the timings, test results and regression changes above come from runs of the france-1944 tools on that commit and on the patched copy, side by side, on 24 Nov 2026.
+- **Inference:** problem 1 almost certainly exists in france-1944, since the code is the same, but this has not been tested on the Overlord map. Whether any Overlord division actually bunches at the start is untested; the German coastal divisions are named as likely cases only. Fix 8's distances (15 km rail limit, 15 km echelon and beyond-line distance, 6 km and 8 km for river assaults, 0.45 km per battalion, 24 hours of rest) are game settings for balance testing, untested against Normandy history. All setting values, including the doctrine distances (15 km development, 8 km bounds, 10 km plus 4 km per battalion of flank guard), are game settings for balance testing drawn from the doctrine above, untested on the Overlord map.
