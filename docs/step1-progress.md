@@ -217,3 +217,14 @@ Checks: regression matches the baseline. AI-against-AI seeds 11 to 13 at 200 hou
 - Corridor taken by Valdenmark in 13 of 20 runs (8 before). With the main effort north: 8 of 9 (8 of 9 before); south: 2 of 7 (0 of 7); center: 3 of 4 (0 of 4).
 - Median losses: Valdenmark 56 battalion-equivalents (81 before), Sarn and Korovia 103 (88 before).
 - Held by Valdenmark at the end: Sarnow in 7 runs (6), Port Vesna 14 (9), Dolna 16 (7), Tarnek 15 (9). Korvik slips to 17 (20).
+
+**Difficulty batches** (25 Nov, build e0f530b, 20 runs of 552 hours each, per-side difficulty through `SC_SIDEDIFF`):
+
+| Batch | Setting | Corridor taken | Median losses V / S+K | Sarnow held by V |
+| --- | --- | --- | --- | --- |
+| merged-engine | none | 13 of 20 | 56 / 103 | 7 |
+| sarn-veteran | Sarn at Veteran opponent | 12 of 20 | 62 / 96 | 11 |
+| sarn-supreme | Sarn at Supreme command | 15 of 20 | 61 / 100 | 7 |
+| vald-staff | Valdenmark at Staff exercise | 13 of 20 | 57 / 82 | 13 |
+
+The four difficulty levels move the corridor result by less than the spread between batches of 20, so the existing levels are too weak to even out the corridor.
