@@ -333,7 +333,51 @@ def route(a, b, seed, amp=0.12):
     pts = [(C[a]["x"], C[a]["y"])] + VIA.get((a, b), []) + [(C[b]["x"], C[b]["y"])]
     return [(round(x, 1), round(y, 1)) for x, y in displace(pts, amp, 4 if len(pts) == 2 else 3, seed)]
 
-rails = [dict(a=a, b=b, pts=route(a, b, 300 + k)) for k, (a, b) in enumerate(RAIL)]
+# a line that touches water (sea or lake) is routed again over land: A* on 1 km cells, then thinned to points that keep it on land
+import heapq
+# land by the engine's own 1 km rule (see mode_cell below): a cell is sea when half or more of it is sea, water when most of it is lake
+_blk = lambda a: a.reshape(H // PX, PX, W // PX, PX).transpose(0, 2, 1, 3).reshape(H // PX, W // PX, PX * PX).sum(-1)
+LANDKM = (_blk(~land) * 2 < PX * PX) & (_blk(lakes & land) * 2 <= PX * PX)
+def wet_km(pts):                                 # km of line on water cells; the first and last km are the city itself (ports sit on the shore)
+    n = 0.0; P0, P1 = pts[0], pts[-1]
+    for (x1, y1), (x2, y2) in zip(pts[:-1], pts[1:]):
+        L = math.hypot(x2 - x1, y2 - y1)
+        for k in range(int(L / .25) + 1):
+            t = k * .25 / L if L else 0; x = x1 + (x2 - x1) * t; y = y1 + (y2 - y1) * t
+            if math.hypot(x - P0[0], y - P0[1]) < 1.2 or math.hypot(x - P1[0], y - P1[1]) < 1.2: continue
+            i, j = int(y), int(x)
+            if not (0 <= i < H_KM and 0 <= j < W_KM) or not LANDKM[i, j]: n += .25
+    return n
+def land_route(a, b):
+    sx, sy, gx, gy = int(a[0]), int(a[1]), int(b[0]), int(b[1])
+    best = {(sx, sy): 0.0}; prev = {}; pq = [(0.0, sx, sy)]
+    while pq:
+        f, x, y = heapq.heappop(pq)
+        if (x, y) == (gx, gy): break
+        g = best[(x, y)]
+        for dx in (-1, 0, 1):
+            for dy in (-1, 0, 1):
+                if not dx and not dy: continue
+                nx, ny = x + dx, y + dy
+                if not (0 <= nx < W_KM and 0 <= ny < H_KM) or not (LANDKM[ny, nx] or (nx, ny) == (gx, gy)): continue
+                if dx and dy and not (LANDKM[y, nx] and LANDKM[ny, x]): continue
+                ng = g + (1.4142 if dx and dy else 1.0) * (1.6 if not (LANDKM[max(0, ny - 2):ny + 3, max(0, nx - 2):nx + 3]).all() else 1.0)   # keep a little off the shore
+                if ng < best.get((nx, ny), 1e18): best[(nx, ny)] = ng; prev[(nx, ny)] = (x, y); heapq.heappush(pq, (ng + math.hypot(gx - nx, gy - ny), nx, ny))
+    if (gx, gy) not in prev: raise SystemExit(f"no land route {a} -> {b}")
+    path = [(gx + .5, gy + .5)]; c = (gx, gy)
+    while c != (sx, sy): c = prev[c]; path.append((c[0] + .5, c[1] + .5))
+    path = path[::-1]; path[0] = tuple(a); path[-1] = tuple(b)
+    def rdp(P):                                  # Douglas-Peucker, refusing any shortcut that would leave the land
+        if len(P) < 3: return P
+        (x1, y1), (x2, y2) = P[0], P[-1]; L = math.hypot(x2 - x1, y2 - y1) or 1e-9
+        d = [abs((x2 - x1) * (y1 - q[1]) - (x1 - q[0]) * (y2 - y1)) / L for q in P[1:-1]]; k = int(np.argmax(d)) + 1
+        if d[k - 1] < 1.5 and wet_km([P[0], P[-1]]) == 0: return [P[0], P[-1]]
+        return rdp(P[:k + 1])[:-1] + rdp(P[k:])
+    return [(round(x, 1), round(y, 1)) for x, y in rdp(path)]
+def dry(ln):
+    if wet_km(ln["pts"]) > 0: ln["pts"] = land_route(ln["pts"][0], ln["pts"][-1]); ln["rerouted"] = True
+    return ln
+rails = [dry(dict(a=a, b=b, pts=route(a, b, 300 + k))) for k, (a, b) in enumerate(RAIL)]
 FERRY_VIA = {}
 ferries = []
 for (a, b), via in FERRY_VIA.items():
@@ -342,7 +386,10 @@ for (a, b), via in FERRY_VIA.items():
     wet = [p for p in dense[2:-2] if is_land(*p)]
     if wet: print("WARN ferry over land", a, b, wet[:3])
     ferries.append(dict(a=a, b=b, pts=[(round(x, 1), round(y, 1)) for x, y in dense]))
-roads = [dict(a=a, b=b, pts=route(a, b, 500 + k, 0.2)) for k, (a, b) in enumerate(ROADS)]
+roads = [dry(dict(a=a, b=b, pts=route(a, b, 500 + k, 0.2))) for k, (a, b) in enumerate(ROADS)]
+for ln in rails + roads:                         # every line must stay on land
+    if wet_km(ln["pts"]) > 0: raise SystemExit(f'line over water: {ln["a"]}-{ln["b"]} ({wet_km(ln["pts"])} km)')
+print("rerouted over land:", [f'{l["a"]}-{l["b"]}' for l in rails + roads if l.get("rerouted")])
 
 def seg_x(p1, p2, p3, p4):
     d = (p2[0] - p1[0]) * (p4[1] - p3[1]) - (p2[1] - p1[1]) * (p4[0] - p3[0])

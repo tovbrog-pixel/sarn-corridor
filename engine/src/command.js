@@ -36,6 +36,11 @@ function attachCommand(S) {
     { const lx = line[line.length - 1][0] - line[0][0], ly = line[line.length - 1][1] - line[0][1], ll = Math.hypot(lx, ly);
       if (opt.square !== false && ll > 1) { let nx = -ly / ll, ny = lx / ll; if (nx * ax + ny * ay < 0) { nx = -nx; ny = -ny; } ax = nx; ay = ny; } }
     const px = -ay, py = ax;                 // left-hand perpendicular of the axis of advance
+    // a corps standing well beyond the objective line, on the enemy's far side (the Ostval Corps when the army attacks the corridor
+    // from the west), keeps its present orders: its route to the line would cross the whole enemy rear. The player orders it apart.
+    let beyondNote = '';
+    if (C.level === 'army' && kids.length > 1) { const far = kids.filter(c => { const q = pos(c); return q && ((mid.x - q[0]) * ax + (mid.y - q[1]) * ay) < -CMDAI.echelonKm; });
+      if (far.length && far.length < kids.length) { for (const c of far) kids.splice(kids.indexOf(c), 1); beyondNote = far.map(c => c.n).join(' and ') + (far.length > 1 ? ' stand' : ' stands') + ' beyond the objective, on the far side of the enemy, and ' + (far.length > 1 ? 'keep their' : 'keeps its') + ' present orders.'; } }
     // the objective line runs left to right as the commander faces it
     const side = (q) => (q[0] - mid.x) * px + (q[1] - mid.y) * py;
     let ln = side(line[0]) >= side(line[line.length - 1]) ? line.slice() : line.slice().reverse(), L0 = L, widened = '';
@@ -101,7 +106,7 @@ function attachCommand(S) {
       // second echelon passes behind the leading divisions' columns instead of across them
       const wb = med + 8, wx = Math.max(0, Math.min(S.map.w, mid.x - ax * wb + px * off)), wy = Math.max(0, Math.min(S.map.h, mid.y - ay * wb + py * off));
       out.push({ child: o.c, path: [[wx, wy]].concat(P.map(q => [q[0] + px * off, q[1] + py * off])), line: [[bx + px * hw, by + py * hw], [bx - px * hw, by - py * hw]], reserve: true }); });
-    out.note = [widened, note].filter(Boolean).join(' '); out.line = ln; return out;
+    out.note = [widened, note, beyondNote].filter(Boolean).join(' '); out.line = ln; return out;
   };
 
   // issue an order to a node: staff time first, then the children receive theirs
@@ -133,7 +138,7 @@ function attachCommand(S) {
     const O = C.order, P = O.plan; if (!P) return; O.nextReview = S.t + 30;
     for (const q of P) { if (q.reserve || !live(q.child)) continue; const d = lineDist(q.child, q.line); if (d < q.best - .5) { q.best = d; q.tBest = S.t; } }
     if (S.t - O.lastAct < CMDAI.coolMin) return;
-    const fwd = P.filter(q => !q.reserve), res = P.find(q => q.reserve && live(q.child) && weight(q.child) >= CMDAI.spentFrac * q.w0 && !(q.restUntil > S.t));   // a formation just pulled out of the line rests 12 hours before it can be committed again
+    const fwd = P.filter(q => !q.reserve), res = P.find(q => q.reserve && live(q.child) && weight(q.child) >= CMDAI.spentFrac * q.w0 && !(q.restUntil > S.t));   // a formation just pulled out of the line rests 24 hours before it can be committed again
     const moving = n => n.forms ? n.forms.some(moving) : !!n.transit;
     // a division waiting at a river, for boats, a bridge or a route, is not stalled: committing the reserve would only bring it to the same bank
     const atRiver = n => n.forms ? n.forms.some(atRiver) : ((S.xings || []).some(X => X.F === n && !X.done) || !!n.alignHold || !!n.flankHold || /crossing|bridg|no route|is down/i.test(n.status || ''));   // also a division halted on purpose for its neighbours or its flank (doctrine module)
@@ -141,14 +146,19 @@ function attachCommand(S) {
     const fin = n => n.forms ? n.forms.filter(live).every(fin) : !!(n.order && n.order.st === 'done');
     const state = q => { if (!live(q.child)) return 'lost'; if (fin(q.child)) return 'done'; if (moving(q.child) || atRiver(q.child)) { q.tBest = S.t; return 'ok'; } if (weight(q.child) < CMDAI.spentFrac * q.w0 || cohOf(q.child) < CMDAI.spentCoh) return 'spent';
       const d = lineDist(q.child, q.line); if (d < CMDAI.onObjKm) return 'done'; if (S.t - q.tBest > CMDAI.stallMin && S.t - O.t0 > CMDAI.stallMin) return 'stalled'; return 'ok'; };
-    // 1. commit the reserve where a forward division is spent or stalled
-    const bad = fwd.map(q => ({ q, st: state(q) })).find(o => o.st === 'spent' || o.st === 'stalled' || o.st === 'lost');
+    // 1. commit the reserve where a forward division is spent or lost. A division merely stalled against a defended line keeps its
+    // sector: the commander reports it once and leaves the decision to the player, because relieving divisions every time an attack
+    // is held up swapped them back and forth and turned the front into churn (Tov's play, 24 Nov 2026)
+    const sts = fwd.map(q => ({ q, st: state(q) }));
+    for (const o of sts) if (o.st === 'stalled' && !o.q.stallRep) { o.q.stallRep = 1; report(C, o.q.child.n + ' is held up short of its objective and has made no ground for ' + Math.round((S.t - o.q.tBest) / 60) + ' hours. ' + (res ? res.child.n + ' stands ready in reserve.' : 'No reserve is left.'), 1); }
+    for (const o of sts) if (o.st === 'ok' && o.q.stallRep && S.t - o.q.tBest < 60) o.q.stallRep = 0;
+    const bad = sts.find(o => o.st === 'spent' || o.st === 'lost');
     if (bad && res) {
       const q = bad.q; send(res.child, res.path.length ? res.path : q.path, q.line, O.opt, false);
       res.reserve = false; res.line = q.line; res.best = 1e9; res.tBest = S.t; res.w0 = weight(res.child);
       // the relieved division rests where it stands while the reserve passes through it (a relief in place), so the two columns do not cross
       if (bad.st !== 'lost') { const L = polyLen(q.line), m = polyAt(q.line, L / 2), p0 = pos(C) || [m.x, m.y], dx = m.x - p0[0], dy = m.y - p0[1], dl = Math.hypot(dx, dy) || 1, here = pos(q.child) || [m.x - dx / dl * 6, m.y - dy / dl * 6], bx = here[0], by = here[1], hw = 1.5;
-        send(q.child, [], [[bx - dy / dl * hw, by + dx / dl * hw], [bx + dy / dl * hw, by - dx / dl * hw]], O.opt, false, 'rest'); q.reserve = true; q.w0 = Math.max(weight(q.child), 1); q.restUntil = S.t + 720; }
+        send(q.child, [], [[bx - dy / dl * hw, by + dx / dl * hw], [bx + dy / dl * hw, by - dx / dl * hw]], O.opt, false, 'rest'); q.reserve = true; q.w0 = Math.max(weight(q.child), 1); q.restUntil = S.t + 1440; }
       else P.splice(P.indexOf(q), 1);
       O.lastAct = S.t; report(C, q.child.n + ' is ' + bad.st + '; ' + res.child.n + ' committed from reserve to take over its sector.', 2); return;
     }

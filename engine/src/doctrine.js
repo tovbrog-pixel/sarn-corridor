@@ -83,7 +83,7 @@ function attachDoctrine(S) {
 // errKm[1] (rear) and identified by name with probability named[s]. Each hour, an enemy division seen by any unit moves its entry
 // to where it was seen and is identified; between sightings the entry keeps its last known position and age. The renderer draws
 // entries for divisions not currently in view as faded estimated symbols. All values are game settings.
-const INTEL0 = { known: [.8, .6], rearMul: .55, errKm: [4, 14], named: [.6, .4], frontKm: 30 };
+const INTEL0 = { known: [.8, .6], rearMul: .55, errKm: [4, 14], named: [.6, .4], frontKm: 30, clearKm: 3, staleH: 24 };   // clearKm: our troops this near a reported position see it is empty; staleH: hours a report on our own ground survives
 function attachIntel(S) {
   const sc = S.sc, Q = Object.assign({}, INTEL0, sc.intel || {}), rnd = S.rnd;
   const fighting = u => u.active && !u.dead && u.cls !== 'hq' && u.mv !== 'ship';
@@ -102,6 +102,12 @@ function attachIntel(S) {
     for (let s = 0; s < 2; s++) { const L = S.intel[s];
       for (let i = L.length - 1; i >= 0; i--) if (L[i].F.dead) L.splice(i, 1);
       for (const F of S.forms) { if (F.s === s || !F.active || F.dead) continue; const p = centre(F, u => S.t - u.seenT < 60); if (!p) continue;
-        let e = L.find(q => q.F === F); if (!e) { e = { F, src: 'contact' }; L.push(e); } Object.assign(e, { x: p[0], y: p[1], t: S.t, named: true, label: label(F), cls: kind(F) }); } } };
+        let e = L.find(q => q.F === F); if (!e) { e = { F, src: 'contact' }; L.push(e); } Object.assign(e, { x: p[0], y: p[1], t: S.t, named: true, label: label(F), cls: kind(F) }); }
+      // strike off a stale report: our troops stand within sight of the reported position and the division is not there, or the
+      // position lies on ground we have held for a day without contact (Tov 24 Nov 2026: markers deep inside our lines)
+      const mine = S.subs.filter(u => u.s === s && fighting(u));
+      for (let i = L.length - 1; i >= 0; i--) { const e = L[i]; if (e.t >= S.t - 1) continue; const c = centre(e.F), there = c && Math.hypot(c[0] - e.x, c[1] - e.y) < 4;
+        if (!there && mine.some(u => Math.hypot(u.x - e.x, u.y - e.y) < Q.clearKm)) { L.splice(i, 1); continue; }
+        if (S.ownAt(e.x, e.y) === s) { e.ownT = e.ownT == null ? S.t : e.ownT; if (S.t - e.ownT > Q.staleH * 60) L.splice(i, 1); } else e.ownT = null; } } };
   return S;
 }

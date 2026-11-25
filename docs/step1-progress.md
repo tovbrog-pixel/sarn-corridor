@@ -189,3 +189,18 @@ Test: Tov's two army orders, seed 101, variant 1, 36 hours.
 - **With the long objective:** 26 battalions across the Vesna by 36 hours.
 
 AI-against-AI, seed 202: Tarnek 4 Jun, Corridor south 7 Jun, Sarnow 10 Jun, losses 33 / 65.
+
+## Third play round (24 Nov 2026 night)
+
+From Tov's save of 22 Jun 1940 (seed 2237), replayed order by order on the engine he played (6c310b3).
+- **Why divisions reversed and took far orders:** in the first 200 hours the corps commanders gave 205 orders of their own (93 rest, 88 hold, 24 reserve) and divisions turned back 30 times. Every stalled attack brought a relief: the reserve came forward, the relieved division went back, and 12 hours later the pair swapped again.
+- **Relief policy:** a commander now commits the reserve only when a forward division is spent or lost. A division held up short of its objective keeps its sector, and the commander reports the stall once. A relieved division rests 24 hours. On Tov's replay: 205 orders became 51 to 71, and 30 reversals became 2 to 5. The far orders left (over 40 km) all follow Tov's own corps orders within the hour.
+- **Ostval Corps:** a corps standing more than 15 km beyond the army's objective line keeps its present orders when the army is ordered forward. Its route to the line crossed the whole Sarn rear. The order note tells the player.
+- **Stale intelligence:** a reported enemy position is struck off when our troops stand within 3 km of it and the division is not within 4 km, or when the spot has been on our ground for 24 hours. Older reports fade with age. On Tov's replay, markers inside our lines fell from 3 to 5 to 0 to 2.
+- **Railways over the sea:** the Gulf of Ostrand grew in the terrain pass after the railway waypoints were set, so the Port Vesna to Ostrand line ran 89 km over water and Varnholm to Ostrand 125 km. The generator now tests every railway and road against the engine's own 1 km sea and lake cells, sends any wet line along a land-only route (A* on 1 km cells, a little off the shore, then thinned without leaving land) and stops with an error if any line still touches water. Six lines changed (five railways, the Westerkai to Kessling road), 4 to 25 km longer each. Terrain and elevation are byte-identical.
+- **Map drawing:**
+  - Trains: a two-car glyph when the camera is over 150 km out, four cars from 60 to 150 km, the full rake closer in.
+  - Supply convoys: closer than 8 km the trucks show as models and the map symbol gives way to the load label.
+  - Corps highlight: selecting a division outlines the other divisions of its corps in a softer yellow.
+
+Checks: regression matches the baseline. AI-against-AI seeds 11 to 13 at 200 hours on this build and on 6c310b3: the same objectives fall, losses within 5 points, one more corridor win (seed 13).
