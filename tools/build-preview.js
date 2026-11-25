@@ -6,7 +6,7 @@ const out = process.argv[2] || '/tmp/preview'; fs.mkdirSync(out, { recursive: tr
 const which = process.argv[3] || 'corridor', menu = process.argv[4] === 'menu', side = menu ? -1 : +(process.argv[4] == null ? -1 : process.argv[4]);   // 'menu': open on the scenario menu (the desktop app)
 const sc = require('./scenario-corridor')();
 const b64 = a => Buffer.from(a.buffer, a.byteOffset, a.byteLength).toString('base64');
-const keep = ['urban', 'districts', 'capBig', 'supplyMin', 'id', 'title', 'sub', 'modules', 'front', 'detourKm', 'aiExact', 'divScale', 'view', 'phaseLines', 'fieldPlan', 'commands', 'cmdPlan', 'politics', 'brief', 'hist', 'ports', 'beach', 'w', 'h', 'cs', 'realLines', 'rivers', 'roads', 'rails', 'towns', 'ownCell', 'thin', 'ownR', 'ownMax', 'isoShrinkKm', 'variants', 'hHour', 'intel', 'corpsPlan', 'armyAI', 'repl', 'playerSides', 'labels', 'hours', 'start', 'forest', 'rough', 'marsh', 'bridges', 'vp', 'weather', 'forms'];
+const keep = ['squareAxis', 'urban', 'districts', 'capBig', 'supplyMin', 'id', 'title', 'sub', 'modules', 'front', 'detourKm', 'aiExact', 'divScale', 'view', 'phaseLines', 'fieldPlan', 'commands', 'cmdPlan', 'politics', 'brief', 'hist', 'ports', 'beach', 'w', 'h', 'cs', 'realLines', 'rivers', 'roads', 'rails', 'towns', 'ownCell', 'thin', 'ownR', 'ownMax', 'isoShrinkKm', 'variants', 'hHour', 'intel', 'corpsPlan', 'armyAI', 'repl', 'playerSides', 'labels', 'hours', 'start', 'forest', 'rough', 'marsh', 'bridges', 'vp', 'weather', 'forms'];
 const D = {}; for (const k of keep) D[k] = sc[k];
 if (sc.thin) D.thin = sc.thin.map(r => r.source);   // regular expressions travel as their source text
 D.raster = { w: sc.raster.w, h: sc.raster.h, t: b64(sc.raster.t), el: b64(sc.raster.el) };
@@ -26,6 +26,7 @@ const order = ['data.js', 'divisions.js', 'map.js', 'scenarios.js', 'tutorial.js
 const vdir = process.env.VOICE_DIR, VO = {}; if (vdir && fs.existsSync(vdir)) for (const f of fs.readdirSync(vdir)) if (f.endsWith('.mp3')) VO[f.slice(0, -4)] = 'data:audio/mpeg;base64,' + fs.readFileSync(path.join(vdir, f)).toString('base64');
 let code = 'window.VOICE = ' + JSON.stringify(VO) + ';\n' + order.map(f => fs.readFileSync(path.join(src, f), 'utf8')).join('\n;\n') + '\n;\n' + inject + '\n;\n' + fs.readFileSync(path.join(src, 'ui.js'), 'utf8');
 let html = fs.readFileSync(path.join(src, 'index.tpl.html'), 'utf8');
-html = html.replace('<!--THREE-->', '<script>' + fs.readFileSync(path.join(root, 'node_modules', 'three', 'build', 'three.min.js'), 'utf8') + '</script>').replace('/*CODE*/', () => code);
+html = html.replace('<!--THREE-->', '<script>' + fs.readFileSync(path.join(root, 'node_modules', 'three', 'build', 'three.min.js'), 'utf8') + '</script>').replace('/*CODE*/', () => code)
+  .replace('/*GAMECFG*/', () => fs.existsSync(path.join(root, 'game.json')) ? 'const GAMECFG = ' + fs.readFileSync(path.join(root, 'game.json'), 'utf8').trim() + ';' : '');   // the game's own name and settings (game.json)
 fs.writeFileSync(path.join(out, 'index.html'), html);
 console.log('preview written: ' + path.join(out, 'index.html') + ' (' + (html.length / 1e6).toFixed(1) + ' MB)');
