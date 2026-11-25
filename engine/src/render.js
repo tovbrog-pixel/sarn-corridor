@@ -97,7 +97,7 @@ function createRenderer(S, glCanvas, ovCanvas, opt) {
         // the staff map shows true ownership near your troops, near objectives and where reconnaissance has looked; elsewhere it keeps the last picture
         if (P < 0) view.set(O.a); else { const look = (x, y, r) => { const i0 = Math.max(0, Math.floor((x - r) / cw)), i1 = Math.min(gw - 1, Math.floor((x + r) / cw)), j0 = Math.max(0, Math.floor((y - r) / cw)), j1 = Math.min(gh - 1, Math.floor((y + r) / cw)); for (let j = j0; j <= j1; j++) for (let i = i0; i <= i1; i++) { const c = j * gw + i; view[c] = O.a[c]; } };
           for (const u of S.subs) if (u.s === P && u.active && !u.dead && u.mv !== 'ship') look(u.x, u.y, 4); for (const v of S.vp) look(v.x, v.y, 1); for (const u of S.subs) if (u.s !== P && u.rpBy === P && S.t - u.rptT < 10) look(u.x, u.y, 2.5); }
-        for (let j = 0; j < gh; j++) for (let i = 0; i < gw; i++) { const c = j * gw + i, o = ((gh - 1 - j) * gw + i) * 4, s0 = view[c] === 0; if (sea[c]) { data[o + 3] = 0; continue; }
+        for (let j = 0; j < gh; j++) for (let i = 0; i < gw; i++) { const c = j * gw + i, o = ((gh - 1 - j) * gw + i) * 4; if (P >= 0 && O.a[c] === P) view[c] = P;   /* ground you hold shows as yours: no stale enemy patches behind your own line */ const s0 = view[c] === 0; if (sea[c]) { data[o + 3] = 0; continue; }
           data[o] = s0 ? 52 : 210; data[o + 1] = s0 ? 40 : 55; data[o + 2] = s0 ? 150 : 40; data[o + 3] = s0 ? 74 : 64; }
         tex.needsUpdate = true;
         // front line: marching squares at the half-way level of a lightly smoothed ownership field

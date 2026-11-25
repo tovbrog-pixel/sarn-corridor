@@ -164,3 +164,28 @@ Test (seed 101, Valdenmark played, the army ordered onto 16 km at Corridor south
 - **Before:** 26 divisions on 16 km.
 - **After:** objectives from y 114 to 347 km, the line widened to 259 km, both panzer corps in second echelon, and one day later the army on the Vesna as a line.
 - **Checks:** `node tools/regress.js` matches. An AI-against-AI run on seed 202 gives similar dates and losses: Tarnek 4 Jun, Vesna crossing 4 Jun, Corridor south 7 Jun, losses 29 / 60.
+
+## Second play round (24 Nov 2026 evening)
+
+From Tov's screenshots: crossing routes, no river assault, brown islands behind the line, divisions entraining and detraining at once.
+- **River assaults:**
+  - Equipment: Valdenmark has four assault-boat companies (Freyburg and Saarholt) and three pontoon columns; Sarn has one of each.
+  - The doctrine module's `xingTick`: a division whose objective lies across a river, with no intact bridge within 8 km of its axis and the river within 6 km, goes over in boats. The AI side, divisions with the staff, and divisions under corps or army orders (`byCmd`) do this themselves; a division under the player's direct order waits for the Cross order.
+- **Reserves:**
+  - A reserve waits behind its own stretch of the line.
+  - A relieved division rests where it stands (relief in place) and cannot be committed again for 12 hours.
+  - A division waiting at a river, or halted on purpose for its neighbours or its flank, no longer counts as stalled.
+  - A division counts as arrived when its own order is complete, or within 2.5 km of the objective.
+- **Second echelon:** its route runs behind the line of departure to the centre before going forward.
+- **Route crossings:** two routes within 35 degrees of the same direction (columns sharing a road) no longer count as crossing. This changes results in every scenario, so the regression baseline was recorded again.
+- **Rail:** trains unload at least 15 km from enemy-held ground (`railFrontKm`), so moves toward battle end by road or on foot. The double entraining and detraining labels came from fresh orders arriving mid-move during the reserve swapping.
+- **Staff map:** ground the player holds always shows as his. The brown islands were stale cells from the start of the game in the gaps between divisions.
+
+Test: Tov's two army orders, seed 101, variant 1, 36 hours.
+- **Route-crossing warnings:** 63 and 156 before, 11 and 6 after.
+- **Reserve commitments:** 12 before, 2 to 4 after, none in the first day.
+- **Assault crossings:** 5 started, 2 completed in each.
+- **Rail moves toward the front:** none.
+- **With the long objective:** 26 battalions across the Vesna by 36 hours.
+
+AI-against-AI, seed 202: Tarnek 4 Jun, Corridor south 7 Jun, Sarnow 10 Jun, losses 33 / 65.

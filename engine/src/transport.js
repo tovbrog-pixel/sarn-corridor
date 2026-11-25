@@ -13,6 +13,7 @@ const TRANSPORT = {
   railLoadMin: 240, railUnloadMin: 180,
   minAdminKm: 12,                     // shorter moves stay tactical
   minRailKm: 30,                      // rail is not worth loading for less
+  railFrontKm: 15,                    // trains unload at least this far from enemy-held ground: a move toward battle ends on foot or by road
   stationKm: 6, exitKm: 8,            // reach from a unit to a station or road, and from the release point to the road
   safetyKm: 6, safetySkillKm: 6,      // distance kept from known enemy: 6 km plus up to 6 km for a less skilled commander
   colKmMotor: .8, colKmFoot: .5,      // column length per unit
@@ -26,6 +27,8 @@ const TRANSPORT = {
 };
 function attachTransport(S) {
   const map = S.map, sc = S.sc, T0 = TRANSPORT;
+  // enemy-held ground within r km of a point (sampled every 2.5 km)
+  const nearFoe = (s, x, y, r) => { for (let dy = -r; dy <= r; dy += 2.5) for (let dx = -r; dx <= r; dx += 2.5) { if (dx * dx + dy * dy > r * r) continue; const qx = x + dx, qy = y + dy; if (qx < 0 || qy < 0 || qx >= map.w || qy >= map.h) continue; const o = S.ownAt(qx, qy); if (o != null && o !== s && map.tAt(qx, qy) !== T.SEA) return true; } return false; };
   // ---------- the network ----------
   const net = { x: [], y: [], adj: [], kind: [], station: [], key: new Map() };
   const K = (x, y) => Math.round(x / .25) + ',' + Math.round(y / .25);
@@ -88,7 +91,7 @@ function attachTransport(S) {
     let rail = null; if ((sc.rails || []).length && inUse(F.s, 'rail') < (side.trains == null ? 2 : side.trains)) { const s0 = nearest(from[0], from[1], 'rail', T0.stationKm);
       if (s0 >= 0) { const t = tree(s0, () => T0.railKmh, safe), s1 = bestExit(t, tx, ty);
         if (s1 >= 0) { const r = trace(t, s1), ramps = net.station[s0] ? 1 : 1.5, rampsOut = net.station[s1] ? 1 : 1.5;
-          if (r.km >= T0.minRailKm && d0 - Math.hypot(net.x[s1] - tx, net.y[s1] - ty) >= T0.minAdminKm) rail = { mode: 'rail', r, rel: { x: net.x[s1], y: net.y[s1] }, from, ramps, rampsOut,
+          if (r.km >= T0.minRailKm && d0 - Math.hypot(net.x[s1] - tx, net.y[s1] - ty) >= T0.minAdminKm && !nearFoe(F.s, net.x[s1], net.y[s1], T0.railFrontKm)) rail = { mode: 'rail', r, rel: { x: net.x[s1], y: net.y[s1] }, from, ramps, rampsOut,
             hours: (T0.railLoadMin * ramps + T0.railUnloadMin * rampsOut) / 60 + r.hours + Math.hypot(net.x[s1] - tx, net.y[s1] - ty) / tacKmh }; } } }
     if (rail && (!road || rail.hours < road.hours)) return rail;
     return road;

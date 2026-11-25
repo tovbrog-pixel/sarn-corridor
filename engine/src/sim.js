@@ -156,12 +156,13 @@ function createSim(sc, player, seed, opt) {
   }
   function segX(a, b, c, d) { const rx = b[0] - a[0], ry = b[1] - a[1], sx = d[0] - c[0], sy = d[1] - c[1], den = rx * sy - ry * sx; if (Math.abs(den) < 1e-9) return null; const t = ((c[0] - a[0]) * sy - (c[1] - a[1]) * sx) / den, u = ((c[0] - a[0]) * ry - (c[1] - a[1]) * rx) / den; if (t < 0 || t > 1 || u < 0 || u > 1) return null; return [a[0] + rx * t, a[1] + ry * t, u]; }
   // friendly lines of advance that the path P would cross (ahead of the other formation's present position)
+  const CROSS_COS = Math.cos(35 * Math.PI / 180);   // routes within 35 degrees of the same direction do not count as crossing
   S.crossings = function (F, P) {
     const out = [];
     for (const G of S.forms) {
       if (G === F || G.s !== F.s || !G.active || G.dead || !G.order) continue; const O = G.order; if ((O.st !== 'active' && O.st !== 'pending') || O.L < 1.5 || O.prog >= O.L - .5) continue;
       let acc = 0, hit = null;
-      for (let j = 1; j < O.path.length && !hit; j++) { const c = O.path[j - 1], d = O.path[j], l = Math.hypot(d[0] - c[0], d[1] - c[1]); for (let i = 1; i < P.length; i++) { const x = segX(P[i - 1], P[i], c, d); if (!x || acc + x[2] * l < O.prog + .3 || Math.hypot(x[0] - P[0][0], x[1] - P[0][1]) < .8) continue; hit = { G, x: x[0], y: x[1] }; break; } acc += l; }
+      for (let j = 1; j < O.path.length && !hit; j++) { const c = O.path[j - 1], d = O.path[j], l = Math.hypot(d[0] - c[0], d[1] - c[1]); for (let i = 1; i < P.length; i++) { const x = segX(P[i - 1], P[i], c, d); if (!x || acc + x[2] * l < O.prog + .3 || Math.hypot(x[0] - P[0][0], x[1] - P[0][1]) < .8) continue; { const ux = P[i][0] - P[i - 1][0], uy = P[i][1] - P[i - 1][1], vx = d[0] - c[0], vy = d[1] - c[1], uu = Math.hypot(ux, uy) * Math.hypot(vx, vy); if (uu > 0 && (ux * vx + uy * vy) / uu > CROSS_COS) continue; } /* columns on the same road heading the same way follow one another: road sharing slows them, they do not cross */  hit = { G, x: x[0], y: x[1] }; break; } acc += l; }
       if (hit) out.push(hit);
     }
     return out;
@@ -169,7 +170,7 @@ function createSim(sc, player, seed, opt) {
   S.issueOrder = function (F, path, line, opt) {
     opt = opt || {}; if (F.s === player) { const L = line && line.length ? line : path; if (L && L.length) { let mx = 0, my = 0; for (const q of L) { mx += q[0]; my += q[1]; } mx /= L.length; my /= L.length; if (S.haltBlock(F, mx, my)) { say(F, sc.halt.why, 2); F.status = 'Held at the army group boundary'; return 'halt'; } } }
     const pend = F.order && F.order.st === 'pending', prev = F.order && F.order.st === 'active' && F.order.L > 1, pendLeft = pend ? Math.max(0, F.order.t0 - S.t) : 0;
-    const O = mkOrder(F, path, line); let delay = 0; O.then = THEN[opt.then] ? opt.then : null; O.forH = opt.forH > 0 ? +opt.forH : 0; O.ext = opt.ext || 0; O.own = !!opt.own; O.stretch = !!opt.stretch; O.press = opt.press >= 0 && opt.press <= 3 ? opt.press | 0 : 1;
+    const O = mkOrder(F, path, line); let delay = 0; O.then = THEN[opt.then] ? opt.then : null; O.forH = opt.forH > 0 ? +opt.forH : 0; O.ext = opt.ext || 0; O.own = !!opt.own; O.stretch = !!opt.stretch; O.byCmd = !!opt.byCmd; O.press = opt.press >= 0 && opt.press <= 3 ? opt.press | 0 : 1;
     if (!S.planning && !opt.free) { delay = (25 + 70 * (1 - F.cmd.sk)) * (DOCT[F.nat] || DOCT.US).delay * (prev ? 1.6 : 1) * (F.s === player ? DF.delay : 1) * (1 + (rnd() - .3) * .25 * VR); if (prev) { F.dis = Math.min(1, F.dis + .15); for (const u of alive(F)) u.coh = Math.max(.15, u.coh - .08); } if (F.post === 'reserve') delay *= .5; else if (F.post === 'dig') delay += 20; }
     const X = S.crossings(F, O.path); O.cross = X; if (X.length) { delay += Math.min(60, 30 * X.length); F.dis = Math.min(1, F.dis + .25); for (const q of X) { q.G.dis = Math.min(1, q.G.dis + .25); q.G.jamT = Math.max(q.G.jamT, S.t + 30); say(F, 'Our line of advance crosses that of ' + q.G.n + ' ' + nearTown(q.x, q.y) + '. Both columns will be delayed and disordered.', 2, q.x, q.y); } }
     O.t0 = S.t + delay; F.order = O; F.post = null; F.halt = false; F.assaultT = 0; F.bridge = null; F.needEng = false; F.haltT = 0;
@@ -383,10 +384,10 @@ function createSim(sc, player, seed, opt) {
   }
   function bridging(F, O) {
     const f = polyAt(O.path, Math.min(O.L, O.prog + 2)); const b = nearBridge(f.x, f.y, O);
-    if (!b) { if (aiF(F) && S.t > (F.xTryT || 0)) { F.xTryT = S.t + 360; const X = S.cross(F, f.x, f.y); if (X && typeof X === 'object') { F.status = 'Assault crossing'; O.bestT = S.t; return; } }   // the staff puts the battalions over in boats
+    if (!b) { if ((aiF(F) || O.byCmd) && S.t > (F.xTryT || 0)) { F.xTryT = S.t + 360; const X = S.cross(F, f.x, f.y); if (X && typeof X === 'object') { F.status = 'Assault crossing'; O.bestT = S.t; return; } }   // the staff puts the battalions over in boats
       if (S.t > F.msgT) { say(F, 'No route forward from ' + nearTown(F.cx, F.cy) + '.', 2); F.msgT = S.t + 720; } O.bestT = S.t; F.status = 'Halted: no route'; return; }
     const eng = field(F).find(u => u.cls === 'eng');
-    if (!eng && aiF(F) && S.t > (F.xTryT || 0)) { F.xTryT = S.t + 360; const X = S.cross(F, b.x, b.y); if (X && typeof X === 'object') { F.status = 'Assault crossing'; O.bestT = S.t; return; } }   // no engineers: the staff tries the boats
+    if (!eng && (aiF(F) || O.byCmd) && S.t > (F.xTryT || 0)) { F.xTryT = S.t + 360; const X = S.cross(F, b.x, b.y); if (X && typeof X === 'object') { F.status = 'Assault crossing'; O.bestT = S.t; return; } }   // no engineers: the staff tries the boats
     if (!eng) { F.needEng = true; F.status = 'Halted: ' + b.name + ' is down'; if (S.t > F.msgT) { say(F, 'The ' + b.name + ' is down. We need engineers attached to bridge it.', 2, b.x, b.y); F.msgT = S.t + 720; } return; }
     if (F.bridge !== b) say(F, 'Engineers moving up to bridge the gap at the ' + b.name + '.', 1, b.x, b.y);
     F.bridge = b; F.status = 'Bridging at ' + b.name; O.bestT = S.t;

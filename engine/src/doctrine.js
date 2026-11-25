@@ -12,7 +12,7 @@
 //     division forward to line the open flank.
 //  4. Main effort: the army commander gives the corps with the best objective a narrow zone and a reserve; the others attack
 //     on wide zones without one (command.js, armyTick).
-const DOCTRINE = { devKm: 15, alignKm: 8, guardKm0: 10, guardKmPerBn: 4, flankOff: 7, sampleKm: 4, tickMin: 30 };
+const DOCTRINE = { devKm: 15, alignKm: 8, guardKm0: 10, guardKmPerBn: 4, flankOff: 7, sampleKm: 4, tickMin: 30, xingNearKm: 6, bridgeKm: 8 };   // xingNearKm: how near the river the division must be to start an assault crossing; bridgeKm: an intact bridge this close is used instead
 function attachDoctrine(S) {
   const sc = S.sc, D = Object.assign({}, DOCTRINE, sc.doctrine || {});
   const fighting = u => u.active && !u.dead && u.cls !== 'hq' && u.mv !== 'ship';
@@ -58,7 +58,22 @@ function attachDoctrine(S) {
     for (const F of S.forms) { const why = F.flankHold || F.alignHold; if (why && F.status !== why && !F.contact) F.status = why; }
   }
   let last = -1e9, lastDev = -1e9;
-  const prev = S.cmdHook; S.cmdHook = function () { if (prev) prev(); if (S.t - lastDev >= 60) { lastDev = S.t; devTick(); } if (S.t - last >= D.tickMin) { last = S.t; frontTick(); } };
+  // river assault: a division ordered to an objective across a river that needs a bridge, with no intact bridge within bridgeKm of its
+  // axis, puts its battalions over in assault boats where the axis meets the river, instead of marching its columns to a distant bridge
+  // and crowding its neighbours (Tov 24 Nov 2026, "No one makes a river assault?"). The AI side and divisions under corps or army
+  // orders do this themselves; a division under the player's direct order waits for the Cross order.
+  function xingTick() {
+    if (!S.cross || !S.xings) return; const map = S.map;
+    for (const F of S.forms) { const O = F.order; if (F.dead || !F.active || !O || O.st !== 'active' || !O.line || O.then === 'reserve') continue;
+      if (!(S.ai[F.s] || F.staff || O.byCmd) || S.t < (F.xAutoT || 0) || S.xings.some(X => X.F === F && !X.done)) continue;
+      const c0 = [F.cx, F.cy], L = O.line, m = [(L[0][0] + L[L.length - 1][0]) / 2, (L[0][1] + L[L.length - 1][1]) / 2], dist = Math.hypot(m[0] - c0[0], m[1] - c0[1]); if (dist < 3) continue;
+      let hit = null; for (let d = .5; d < dist; d += .5) { const x = c0[0] + (m[0] - c0[0]) * d / dist, y = c0[1] + (m[1] - c0[1]) * d / dist, t = map.t[map.idx(x, y)]; if (t === T.RIVER) { hit = [x, y, d]; break; } if (t === T.SEA) break; }
+      if (!hit || hit[2] > D.xingNearKm) continue;                                               // no river on the axis, or the division is not yet near it
+      if (map.bridges.some(b => b.intact !== false && !b.gone && Math.hypot(b.x - hit[0], b.y - hit[1]) < D.bridgeKm)) continue;   // a bridge close by: use it
+      F.xAutoT = S.t + 360; const r = S.cross(F, hit[0], hit[1]);
+      if (r && typeof r === 'object') { F.status = 'Assault crossing'; S.say(F.s, F.n + ': no bridge near our axis; the battalions go over the river in assault boats.', 1); } }
+  }
+  const prev = S.cmdHook; S.cmdHook = function () { if (prev) prev(); if (S.t - lastDev >= 60) { lastDev = S.t; devTick(); } if (S.t - last >= D.tickMin) { last = S.t; frontTick(); xingTick(); } };
   return S;
 }
 

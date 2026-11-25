@@ -110,6 +110,11 @@ function makeCorridor() {
   if (process.env.SC_SMALLTOWNS) for (const t of m.towns) t.length = 4;   // test switch: the engine's original town sizes
   // ---- supply, ports, air (game settings; aircraft types are stand-ins)
   const src = (n, at, stock, rate, t) => { const p = typeof at === 'string' ? C(at) : W(at[0], at[1]); return Object.assign({ n, x: p[0], y: p[1], stock, rate }, t ? { t } : {}); };
+  // river-crossing equipment (game settings): Valdenmark's pioneer park for an attack across the Vesna, Sarn's small reserve
+  const XEQ_V = [{ k: 'boats', n: 26, nm: 'Assault boats, I Pioneer Park', at: 'Freyburg railhead' }, { k: 'boats', n: 26, nm: 'Assault boats, II Pioneer Park', at: 'Freyburg railhead' },
+                 { k: 'boats', n: 26, nm: 'Assault boats, III Pioneer Park', at: 'Saarholt railhead' }, { k: 'boats', n: 26, nm: 'Assault boats, IV Pioneer Park', at: 'Saarholt railhead' },
+                 { k: 'bridge', n: 1, nm: 'Pontoon bridge column A', at: 'Freyburg railhead' }, { k: 'bridge', n: 1, nm: 'Pontoon bridge column B', at: 'Freyburg railhead' }, { k: 'bridge', n: 1, nm: 'Pontoon bridge column C', at: 'Saarholt railhead' }];
+  const XEQ_S = [{ k: 'boats', n: 26, nm: 'Assault boats, Sarn Engineers', at: 'Tarnek depot' }, { k: 'bridge', n: 1, nm: 'Sarn pontoon column', at: 'Sarnow depots' }];
   const vSrc = [src('Halden depots', 'Halden', 120, 4), src('Freyburg railhead', 'Freyburg', 90, 4), src('Saarholt railhead', 'Saarholt', 60, 3), src('Brennhaven port', 'Brennhaven', 40, 2), src('Ostrand port (Ostval)', 'Ostrand', 40, 2), src('Varnholm depot', 'Varnholm', 20, 1)];
   const sSrc = [src('Sarnow depots', 'Sarnow', 90, 4), src('Port Vesna', 'Port Vesna', 40, 2), src('Tarnek depot', 'Tarnek', 40, 2), src('Velka depot', [760, 270], 30, 2), src('Korovian railhead at the frontier', [955, 190], 80, 4, HHOUR + 60)];
   const pv = C('Port Vesna'), ports = [{ vp: 'Port Vesna', s: 0, n: 'Port Vesna port', x: pv[0], y: pv[1], rate: 3, stock: 20, clear: 72 }];
@@ -123,7 +128,7 @@ function makeCorridor() {
   const sides = base.sides.map((sd, s) => Object.assign({}, sd, {
     name: s ? 'Sarn, with Korovia from day 3' : 'Valdenmark: Army of the North',
     rear: s ? [1, 0] : [-1, 0], pocket: s ? true : undefined, restH: s ? 4 : 8, aiPerVP: s ? 2 : 3, aiRng: s ? 0 : 120, posture: s ? 'defend' : 'attack',
-    assets: [], sources: s ? sSrc : vSrc, pool: [], bases: s ? sBases : vBases, transport: { aircraft: 0 }, groups: s ? sGroups : vGroups }));
+    assets: s ? XEQ_S : XEQ_V, sources: s ? sSrc : vSrc, pool: [], bases: s ? sBases : vBases, transport: { aircraft: 0 }, groups: s ? sGroups : vGroups }));
   const v0 = variants[0];
   return Object.assign({}, base, m, { id: 'corridor', title: 'Corridor Crisis', sub: 'Valdenmark against Sarn: two days of tension, then three weeks of war', start: START, hours: HHOUR + DAYS * 24, hHour: HHOUR,
     ownCell: +(process.env.SC_OWNCELL || 1), supplyMin: process.env.SC_SUPMIN ? +process.env.SC_SUPMIN : undefined, ownR: 5, ownMax: 25, isoShrinkKm: 20, thin: [/^\d+(st|nd|rd|th) (\(\w+\) )?Division$/], aiExact: 1, labels: ['Valdenmark', 'Sarn'], divScale: [22, 70],   // thin: Sarn's divisions stretch over long sectors (thin defence)
