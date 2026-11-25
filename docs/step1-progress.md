@@ -212,3 +212,8 @@ Checks: regression matches the baseline. AI-against-AI seeds 11 to 13 at 200 hou
 - **Square axis for corps orders:** on Tov's 22 Jun replay, France's corps axis (centre to objective) gave 14 turn-backs in 200 hours; the square axis gave 2, with 36 commander orders. The square axis now applies to corps orders in both games.
 - **France tutorial:** the 1st Armored Division starts at 24, 34, behind II Corps, so the square axis keeps Hale's plan winning on all five seeds (70-10, 80-0, 70-10, 50-30, 80-0). Only `tutorial-tn` changes in the regression. Overlord computer-against-computer runs are identical, since the computer's corps lines are already square.
 - **Shared repository:** the engine and its README and change log are ready in a local repository for tovbrog-pixel/lines-of-advance-engine, waiting for the empty repository on GitHub.
+
+**Batch on the merged engine** (`docs/tests/batch-20261125-1627-merged-engine.md`, commit 869b601, 20 runs of 552 hours), against the bigger-towns batch of 24 Nov (`batch-20261124-2358-towns-big.md`):
+- Corridor taken by Valdenmark in 13 of 20 runs (8 before). With the main effort north: 8 of 9 (8 of 9 before); south: 2 of 7 (0 of 7); center: 3 of 4 (0 of 4).
+- Median losses: Valdenmark 56 battalion-equivalents (81 before), Sarn and Korovia 103 (88 before).
+- Held by Valdenmark at the end: Sarnow in 7 runs (6), Port Vesna 14 (9), Dolna 16 (7), Tarnek 15 (9). Korvik slips to 17 (20).
