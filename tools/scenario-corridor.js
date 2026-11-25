@@ -131,7 +131,7 @@ function makeCorridor() {
     assets: s ? XEQ_S : XEQ_V, sources: s ? sSrc : vSrc, pool: [], bases: s ? sBases : vBases, transport: { aircraft: 0 }, groups: s ? sGroups : vGroups }));
   const v0 = variants[0];
   return Object.assign({}, base, m, { id: 'corridor', title: 'Corridor Crisis', sub: 'Valdenmark against Sarn: two days of tension, then three weeks of war', start: START, hours: HHOUR + DAYS * 24, hHour: HHOUR,
-    ownCell: +(process.env.SC_OWNCELL || 1), supplyMin: process.env.SC_SUPMIN ? +process.env.SC_SUPMIN : undefined, ownR: 5, ownMax: 25, isoShrinkKm: 20, squareAxis: 'all', thin: [/^\d+(st|nd|rd|th) (\(\w+\) )?Division$/], aiExact: 1, labels: ['Valdenmark', 'Sarn'], divScale: [22, 70],   // thin: Sarn's divisions stretch over long sectors (thin defence)
+    ownCell: +(process.env.SC_OWNCELL || 1), supplyMin: process.env.SC_SUPMIN ? +process.env.SC_SUPMIN : undefined, ownR: 5, ownMax: 25, isoShrinkKm: 20, thin: [/^\d+(st|nd|rd|th) (\(\w+\) )?Division$/], aiExact: 1, labels: ['Valdenmark', 'Sarn'], divScale: [22, 70],   // thin: Sarn's divisions stretch over long sectors (thin defence)
     forms: v0.forms, commands: v0.commands, cmdPlan: v0.cmdPlan, corpsPlan: v0.corpsPlan, variants,
     armyAI: { only: ['vd-army', 'ko-army'], from: HHOUR + 30, frontKm: 5, reachKm: 70, cadenceH: 18, waitH: 30, supply: .3, pocketBonus: 2.5 },
     detourKm: 30, view: { x: 330, y: 190, dist: 230, pitch: 1.3 }, playerSides: [0, 1, -1],

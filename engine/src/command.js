@@ -40,10 +40,9 @@ function attachCommand(S) {
     let ax = mid.x - p0[0], ay = mid.y - p0[1]; const al = Math.hypot(ax, ay) || 1; ax /= al; ay /= al;
     // the axis of advance runs square to the objective line, away from our side of it; the line from the node's centre to the
     // objective decides only which way, since one far-off child (a corps attacking from the other side) can pull that centre aside.
-    // Army orders only by default: a corps keeps the axis from its centre to the objective, as the France tutorial and scenario plans expect.
-    // A scenario with sc.squareAxis: 'all' squares corps orders too (Sarn Corridor: on Tov's 22 Jun replay, 2 turn-backs in 200 hours against 14)
+    // Army and corps orders alike (25 Nov 2026): on Tov's 22 Jun Sarn Corridor replay the diagonal axis gave 14 turn-backs in 200 hours, the square axis 2
     { const lx = line[line.length - 1][0] - line[0][0], ly = line[line.length - 1][1] - line[0][1], ll = Math.hypot(lx, ly);
-      if (opt.square !== false && (C.level === 'army' || S.sc.squareAxis === 'all') && ll > 1) { let nx = -ly / ll, ny = lx / ll; if (nx * ax + ny * ay < 0) { nx = -nx; ny = -ny; } ax = nx; ay = ny; } }
+      if (opt.square !== false && ll > 1) { let nx = -ly / ll, ny = lx / ll; if (nx * ax + ny * ay < 0) { nx = -nx; ny = -ny; } ax = nx; ay = ny; } }
     const px = -ay, py = ax;                 // left-hand perpendicular of the axis of advance
     // a corps standing well beyond the objective line, on the enemy's far side (the Ostval Corps when the army attacks the corridor
     // from the west), keeps its present orders: its route to the line would cross the whole enemy rear. The player orders it apart.

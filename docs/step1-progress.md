@@ -204,3 +204,11 @@ From Tov's save of 22 Jun 1940 (seed 2237), replayed order by order on the engin
   - Corps highlight: selecting a division outlines the other divisions of its corps in a softer yellow.
 
 Checks: regression matches the baseline. AI-against-AI seeds 11 to 13 at 200 hours on this build and on 6c310b3: the same objectives fall, losses within 5 points, one more corridor win (seed 13).
+
+## One engine for both games (25 Nov 2026)
+
+- **Merge:** `engine/src` is the merged engine: France 1944's at 01917bd plus Sarn's opt-in parts. France 1944 with it matches its own regression, command tests, tutorial run, rail test and a 96 h Overlord run. Sarn's regression results now equal France's on every shared scenario.
+- **Game settings:** each game's name and wording come from `game.json`, which `tools/build-preview.js` puts on the page as `GAMECFG`.
+- **Square axis for corps orders:** on Tov's 22 Jun replay, France's corps axis (centre to objective) gave 14 turn-backs in 200 hours; the square axis gave 2, with 36 commander orders. The square axis now applies to corps orders in both games.
+- **France tutorial:** the 1st Armored Division starts at 24, 34, behind II Corps, so the square axis keeps Hale's plan winning on all five seeds (70-10, 80-0, 70-10, 50-30, 80-0). Only `tutorial-tn` changes in the regression. Overlord computer-against-computer runs are identical, since the computer's corps lines are already square.
+- **Shared repository:** the engine and its README and change log are ready in a local repository for tovbrog-pixel/lines-of-advance-engine, waiting for the empty repository on GitHub.
