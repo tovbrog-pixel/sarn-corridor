@@ -35,7 +35,7 @@ function createSim(sc, player, seed, opt) {
   // deployment variants (sc.variants): one is drawn from the seed when the game starts, so a hidden plan differs from game to game;
   // a variant replaces the scenario fields it carries (forms, corpsPlan and the like). opt.variant forces one, for tests.
   if (sc.variants && sc.variants.length) { const vr = mulberry((seed || 20261119) ^ 0x5bd1e995), vi = opt && opt.variant != null ? opt.variant : Math.floor(vr() * sc.variants.length); sc = Object.assign({}, sc, sc.variants[vi], { variantIndex: vi }); }
-  opt = opt || {}; const VR = opt.vary == null ? 1 : opt.vary, DF = DIFF[opt.diff == null ? 1 : opt.diff], foe = player < 0 ? -1 : 1 - player, D1 = { xp: 1, sup: 1, react: 1, arr: 1, delay: 1 }, dfS = s => s === foe ? DF : D1;
+  opt = opt || {}; const VR = opt.vary == null ? 1 : opt.vary, DF = DIFF[opt.diff == null ? 1 : opt.diff], foe = player < 0 ? -1 : 1 - player, D1 = { xp: 1, sup: 1, react: 1, arr: 1, delay: 1 }, dfS = s => opt.sideDiff ? DIFF[opt.sideDiff[s]] || D1 : s === foe ? DF : D1;   // opt.sideDiff = [level of side 0, level of side 1]: tests a difficulty level on either side with no player (batches)
   const map = buildMap(sc), rnd = mulberry(seed || 20261119), N = map.N;
   // friction: the forecast stays as scripted, the weather that arrives may differ
   const WSEQ = ['clear', 'cloud', 'overcast', 'rain'], weather = sc.weather.map((w, i) => { if (!i || rnd() > .17 * VR) return w; const k = WSEQ.indexOf(w); if (k < 0) return rnd() < .5 ? 'overcast' : w; return WSEQ[clamp(k + (rnd() < .5 ? -1 : 1), 0, 3)]; });

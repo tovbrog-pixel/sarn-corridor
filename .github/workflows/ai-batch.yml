@@ -12,6 +12,9 @@ on:
       config:
         description: 'Game version: big (bigger towns, town rules on), bigx (bigger towns, rules off), small (original town sizes, rules off)'
         default: 'big'
+      sidediff:
+        description: 'Difficulty level per side, Valdenmark,Sarn (0 Staff exercise, 1 Standard, 2 Veteran opponent, 3 Supreme command); empty = none'
+        default: ''
 
 permissions:
   contents: write
@@ -29,6 +32,7 @@ jobs:
       - uses: actions/setup-node@v4
         with: { node-version: 22 }
       - run: |
+          if [ -n "${{ inputs.sidediff }}" ]; then echo "SC_SIDEDIFF=${{ inputs.sidediff }}" >> $GITHUB_ENV; fi
           case "${{ inputs.config }}" in bigx) echo "SC_NOURBAN=1" >> $GITHUB_ENV;; small) echo "SC_NOURBAN=1" >> $GITHUB_ENV; echo "SC_SMALLTOWNS=1" >> $GITHUB_ENV;; esac
       - run: mkdir -p results && node tools/scenario-corridor.js ${{ inputs.hours }} ${{ matrix.seed }} results/run-${{ matrix.seed }}.json | tee results/run-${{ matrix.seed }}.log
       - uses: actions/upload-artifact@v4

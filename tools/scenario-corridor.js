@@ -149,7 +149,7 @@ module.exports = makeCorridor; module.exports.WIN = WIN; module.exports.START = 
 
 if (require.main === module) {
   const hours = +(process.argv[2] || 72), seed = +(process.argv[3] || 12345), vi = process.argv[5] != null ? +process.argv[5] : undefined;
-  const t0 = Date.now(), sc = makeCorridor(), S = createSim(sc, -1, seed, vi != null ? { variant: vi } : {}); S.setup();
+  const t0 = Date.now(), sc = makeCorridor(), S = createSim(sc, -1, seed, Object.assign(vi != null ? { variant: vi } : {}, process.env.SC_SIDEDIFF ? { sideDiff: process.env.SC_SIDEDIFF.split(',').map(Number) } : {})); S.setup();   // SC_SIDEDIFF=a,b: difficulty level index for Valdenmark and for Sarn (0 Staff exercise, 1 Standard, 2 Veteran opponent, 3 Supreme command)
   const V = sc.variants[S.sc.variantIndex];
   console.log('Corridor: ' + sc.w + ' x ' + sc.h + ' km; variant ' + S.sc.variantIndex + ' (' + V.variantName + '); objectives ' + sc.vp.length + ', bridges ' + S.map.bridges.length);
   console.log('  ' + S.forms.filter(f => f.s === 0).length + ' Valdenmark and ' + S.forms.filter(f => f.s === 1).length + ' Sarn and Korovian divisions, ' + S.subs.length + ' battalions; intel entries V ' + S.intel[0].length + ', S ' + S.intel[1].length + '; setup ' + ((Date.now() - t0) / 1000).toFixed(1) + ' s');
