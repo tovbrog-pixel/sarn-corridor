@@ -148,3 +148,19 @@ Applied from france-1944 (`docs/town-and-city-fighting-for-sarn-corridor.md` and
   - Korovian track is broad gauge, with gauge breaks on the Sarnow-Belov and Varnholm-Belov lines.
   - 9 airfields, sized 1 to 3.
 - **Terrain cells:** open 182,976; light forest 5,686; heavy forest 1,065; hills 8,721; mountains 14,024; desert 3,147; beach 556; marsh 2,480; sea 20,584; river and lake 761.
+
+## Army orders (24 Nov 2026, from Tov's first play)
+
+Tov ordered the whole army forward on a short objective line, and the army collapsed onto one point: the commander had split a 16 km line among 26 divisions, 0.9 km each. Fixed in `engine/src/command.js`, `planCommandOrder`:
+- **Axis:** the axis of advance runs square to the objective line, away from our side of it. One far-off corps, such as the Ostval Corps attacking from the east, no longer pulls it aside.
+- **Width:**
+  - An army order's objective line runs on along its own direction to cover the front the army holds, so the flank corps go straight ahead and the corps facing the objective take it.
+  - Any order's line runs on to at least the room the divisions need to attack, 0.45 km per leading battalion.
+  - A corps keeps the narrow line it is given beyond that, so concentration still works when the player orders a corps.
+- **Second echelon:** children standing more than 15 km behind the median depth follow behind the main effort, halting 10 km short, and the commander can commit them like a reserve. They no longer take sectors in the line and cut across the leading divisions' routes.
+- **Messages:** the commander reports the widening and the second echelon in his messages.
+
+Test (seed 101, Valdenmark played, the army ordered onto 16 km at Corridor south):
+- **Before:** 26 divisions on 16 km.
+- **After:** objectives from y 114 to 347 km, the line widened to 259 km, both panzer corps in second echelon, and one day later the army on the Vesna as a line.
+- **Checks:** `node tools/regress.js` matches. An AI-against-AI run on seed 202 gives similar dates and losses: Tarnek 4 Jun, Vesna crossing 4 Jun, Corridor south 7 Jun, losses 29 / 60.

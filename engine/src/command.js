@@ -5,7 +5,7 @@
 // keeps a reserve when his style calls for it, and passes each child a parallel line of advance, so sister
 // formations do not cross each other's routes. Children then plan their own orders as before.
 // review settings, all starting values for balance testing
-const CMDAI = { spentFrac: .45, spentCoh: .3, stallMin: 180, onObjKm: 1.5, coolMin: 120 };
+const CMDAI = { spentFrac: .45, spentCoh: .3, stallMin: 180, onObjKm: 1.5, coolMin: 120, kmPerBn: .45, echelonKm: 15 };   // echelonKm: a child standing this far behind the others follows as second echelon   // kmPerBn: attack frontage per leading battalion, so a 9-battalion division needs about 4 km
 function attachCommand(S) {
   const nodes = []; S.commands = nodes; const sc = S.sc;
   const segOf = (line, a, b) => {           // the part of polyline `line` between distances a and b
@@ -29,12 +29,29 @@ function attachCommand(S) {
   // plan the split of one order across the node's children. Returns [{ child, path, line, reserve }].
   S.planCommandOrder = function (C, path, line, opt) {
     opt = opt || {}; const kids = C.forms.filter(live); if (!kids.length || !line || line.length < 2) return [];
-    const p0 = pos(C) || line[0], L = polyLen(line), mid = polyAt(line, L / 2);
+    const p0 = pos(C) || line[0], mid = polyAt(line, polyLen(line) / 2); let L = polyLen(line);
     let ax = mid.x - p0[0], ay = mid.y - p0[1]; const al = Math.hypot(ax, ay) || 1; ax /= al; ay /= al;
+    // the axis of advance runs square to the objective line, away from our side of it; the line from the node's centre to the
+    // objective decides only which way, since one far-off child (a corps attacking from the other side) can pull that centre aside
+    { const lx = line[line.length - 1][0] - line[0][0], ly = line[line.length - 1][1] - line[0][1], ll = Math.hypot(lx, ly);
+      if (opt.square !== false && ll > 1) { let nx = -ly / ll, ny = lx / ll; if (nx * ax + ny * ay < 0) { nx = -nx; ny = -ny; } ax = nx; ay = ny; } }
     const px = -ay, py = ax;                 // left-hand perpendicular of the axis of advance
     // the objective line runs left to right as the commander faces it
     const side = (q) => (q[0] - mid.x) * px + (q[1] - mid.y) * py;
-    const ln = side(line[0]) >= side(line[line.length - 1]) ? line.slice() : line.slice().reverse();
+    let ln = side(line[0]) >= side(line[line.length - 1]) ? line.slice() : line.slice().reverse(), L0 = L, widened = '';
+    // an objective line too short for the formations: the commander widens it along its own direction, equally on both flanks,
+    // so the drawn objective stays the centre of the attack and every division gets a sector it can attack on
+    // ... and so that the formations advance on the frontage they hold now: a line shorter than their spread runs on to cover it, so
+    // the flanks go straight ahead and the formations facing the objective take it (Tov 24 Nov 2026, "I ordered the whole army to advance")
+    const needKm = kids.reduce((s, c) => s + Math.max(1, weight(c)), 0) * CMDAI.kmPerBn;
+    if (opt.widen !== false) { const a = ln[0], b = ln[ln.length - 1], ul = Math.hypot(b[0] - a[0], b[1] - a[1]) || 1, ux = (b[0] - a[0]) / ul, uy = (b[1] - a[1]) / ul, tq = q => (q[0] - mid.x) * ux + (q[1] - mid.y) * uy;
+      let lo = Math.min(-L / 2, -needKm / 2), hi = Math.max(L / 2, needKm / 2);
+      // an army keeps its frontage; a corps closes up on the objective it is given, as concentration demands
+      if (C.level === 'army') for (const c of kids) { const q = pos(c); if (!q) continue; const hw = Math.max(1.5, weight(c) * CMDAI.kmPerBn / 2), t = tq(q); lo = Math.min(lo, t - hw); hi = Math.max(hi, t + hw); }
+      const eL = -L / 2 - lo, eR = hi - L / 2;
+      if (eL > .5 || eR > .5) { const a1 = ln[1], b1 = ln[ln.length - 2], ua = Math.hypot(a[0] - a1[0], a[1] - a1[1]) || 1, ub = Math.hypot(b[0] - b1[0], b[1] - b1[1]) || 1, cl = (x, lim) => Math.max(0, Math.min(lim, x));
+        ln = [[cl(a[0] + (a[0] - a1[0]) / ua * eL, S.map.w), cl(a[1] + (a[1] - a1[1]) / ua * eL, S.map.h)]].concat(ln, [[cl(b[0] + (b[0] - b1[0]) / ub * eR, S.map.w), cl(b[1] + (b[1] - b1[1]) / ub * eR, S.map.h)]]);
+        L = polyLen(ln); widened = 'The objective is ' + L0.toFixed(0) + ' km wide; the line runs on to ' + L.toFixed(0) + ' km' + (C.level === 'army' ? ' to cover the front, the formations facing the objective take it as drawn.' : ', the room ' + kids.length + ' divisions need to attack, the main effort on the objective as drawn.'); } }
     // children ordered left to right by where they stand now, so assignments do not cross
     const at = kids.map(c => ({ c, p: pos(c) || p0 })).sort((a, b) => ((b.p[0] - p0[0]) * px + (b.p[1] - p0[1]) * py) - ((a.p[0] - p0[0]) * px + (a.p[1] - p0[1]) * py));
     // a reserve: cautious commanders hold one child back when they have three or more
@@ -50,6 +67,15 @@ function attachCommand(S) {
       let ri = 0, bw = 1e9; at.forEach((o, i) => { const w = weight(o.c); if (i > 0 && i < at.length - 1 && w < bw) { bw = w; ri = i; } }); if (!ri) ri = Math.floor(at.length / 2);
       reserve = at.splice(ri, 1)[0];
     }
+    // second echelon: children standing well behind the rest (by the median depth along the axis) follow the main effort
+    // instead of taking sectors in the line, so their routes do not cut across the leading formations' (Tov 24 Nov 2026)
+    const second = [];
+    if (opt.reserve !== false && at.length >= 3) {
+      // depth: distance behind the objective line (negative for a child already beyond it, as a corps attacking from the far side)
+      const behind = o => (mid.x - o.p[0]) * ax + (mid.y - o.p[1]) * ay;   // along the axis only, so a corps off a flank does not count as behind
+      const ds = at.map(behind).sort((a, b) => a - b), med = ds[ds.length >> 1];
+      for (let i = at.length - 1; i >= 0; i--) if (behind(at[i]) > med + CMDAI.echelonKm && at.length - 1 >= 2) second.push(at.splice(i, 1)[0]); }
+    if (second.length) note = (note ? note + ' ' : '') + second.map(o => o.c.n).reverse().join(' and ') + (second.length > 1 ? ' follow' : ' follows') + ' in second echelon behind the main effort.';
     const W = at.reduce((s, o) => s + Math.max(1, weight(o.c)), 0); let acc = 0; const out = [];
     const P = (path && path.length ? path : []).filter(q => q);
     const bnd = [0]; for (const o of at) { acc += Math.max(1, weight(o.c)); bnd.push(acc / W * L); }
@@ -69,7 +95,10 @@ function attachCommand(S) {
       const bx = mid.x - ax * 6 + px * roff, by = mid.y - ay * 6 + py * roff;
       out.push({ child: reserve.c, path: P.map(q => [q[0] + px * roff, q[1] + py * roff]), line: [[bx + px * hw, by + py * hw], [bx - px * hw, by - py * hw]], reserve: true });
     }
-    out.note = note; return out;
+    second.forEach((o, k) => {                // second echelon: lanes either side of the centre, halting 10 km short of the objective
+      const off = (k - (second.length - 1) / 2) * 6, hw = 2, bx = mid.x - ax * 10 + px * off, by = mid.y - ay * 10 + py * off;
+      out.push({ child: o.c, path: P.map(q => [q[0] + px * off, q[1] + py * off]), line: [[bx + px * hw, by + py * hw], [bx - px * hw, by - py * hw]], reserve: true }); });
+    out.note = [widened, note].filter(Boolean).join(' '); out.line = ln; return out;
   };
 
   // issue an order to a node: staff time first, then the children receive theirs
