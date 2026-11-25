@@ -8,9 +8,11 @@
 //   shape      a battalion mixed into a sister division of its corps (the nearest friendly battalion within 2 km belongs to
 //              the sister and its own division centre is over 4 km away), a division attacking (in contact under an advance order)
 //              with no other division within 8 km
-//   piecemeal  a corps with two or more forward divisions under orders where one is in contact and the others are over 10 km off and out of contact
+//   piecemeal  a corps attack where one division is in contact and the others in the same attack (objective lines within 15 km of its own)
+//              are over 10 km off and out of contact
 //   jams       a battalion on the move with a path that made under 0.3 km in the hour with no enemy within 4 km and no halt
 //   refused    a division whose order its commander refused, in division-hours, with the reasons
+//   spread     a corps whose two farthest divisions stand over 30 km apart, in corps-hours (and the median corps span)
 //   held       a division halted at a bound (alignment) or for an open flank, in division-hours, with the longest unbroken halt
 //   idle       a division with an active order whose centre moved under 0.5 km in 3 hours with no enemy within 5 km and no halt, river wait or bound
 // Every count is in unit-hours; the worst six-hour windows are listed with places, for screenshots.
@@ -36,7 +38,7 @@ S.issueOrder = function (F, p, line, opt) { const L = line && line.length ? line
 const live = F => F.active && !F.dead, bats = F => F.subs.filter(u => u.active && !u.dead && u.cls !== 'hq' && !u.det && u.mv !== 'ship');
 const W = {}; const tally = (s, k, n, where) => { if (!n) return; const w = Math.floor(S.t / 360); const key = s + '|' + w; const r = W[key] || (W[key] = { s, w, c: {}, ex: {} }); r.c[k] = (r.c[k] || 0) + n; if (where) (r.ex[k] = r.ex[k] || []).push(where); };
 const tot = [{}, {}]; const add = (s, k, n) => { tot[s][k] = (tot[s][k] || 0) + n; };
-const hist = new Map(), longest = [{}, {}], WHY = {}; const why = (s, k, r) => { const key = s + ' ' + k + ': ' + r; WHY[key] = (WHY[key] || 0) + 1; };
+const hist = new Map(), spans = [], longest = [{}, {}], WHY = {}; const why = (s, k, r) => { const key = s + ' ' + k + ': ' + r; WHY[key] = (WHY[key] || 0) + 1; };
 function hour() {
   // enemy battalions in 2 km buckets, for nearest-enemy distances
   const B = [new Map(), new Map()]; for (const F of S.forms) for (const u of F.subs) if (u.active && !u.dead) { const k = Math.floor(u.x / 2) + ',' + Math.floor(u.y / 2); const m = B[u.s]; (m.get(k) || m.set(k, []).get(k)).push(u); }
@@ -72,21 +74,27 @@ function hour() {
     }
     // piecemeal: per corps
     const corps = [...new Set(divs.map(F => F.parent).filter(C => C && C.level === 'corps'))];
+    for (const C of corps) { const ks = divs.filter(F => F.parent === C); let span = 0, pr = null; for (const A of ks) for (const B2 of ks) { const d = Math.hypot(A.cx - B2.cx, A.cy - B2.cy); if (d > span) { span = d; pr = [A, B2]; } }
+      if (ks.length >= 2) { spans.push(span); if (span > 30) { add(s, 'spread', 1); tally(s, 'spread', 1, { F: C.n + ' ' + Math.round(span) + ' km: ' + pr[0].n + ' to ' + pr[1].n, x: +pr[0].cx.toFixed(1), y: +pr[0].cy.toFixed(1), at: S.nearTown(pr[0].cx, pr[0].cy) }); } } }
     for (const C of corps) { const fw = divs.filter(F => F.parent === C && F.order && F.order.st === 'active' && F.post !== 'reserve' && F.order.then !== 'reserve'); if (fw.length < 2) continue;
       const hot = fw.filter(F => F.contact); if (hot.length !== 1) continue; const H = hot[0];
-      if (fw.every(F => F === H || Math.hypot(F.cx - H.cx, F.cy - H.cy) > 10)) { add(s, 'piecemeal', 1); tally(s, 'piecemeal', 1, { F: C.n + ': ' + H.n + ' alone', x: +H.cx.toFixed(1), y: +H.cy.toFixed(1), at: S.nearTown(H.cx, H.cy) }); } }
+      // only the divisions in the same attack count: their objective lines lie within 15 km of the engaged division's
+      const mid = G => { const L = G.order.line && G.order.line.length ? G.order.line : G.order.path; return L[Math.floor(L.length / 2)]; }, hm = mid(H);
+      const mates = fw.filter(G => G !== H && Math.hypot(mid(G)[0] - hm[0], mid(G)[1] - hm[1]) < 15); if (!mates.length) continue;
+      if (mates.every(F => Math.hypot(F.cx - H.cx, F.cy - H.cy) > 10)) { if (process.env.COH_WHY) { why(s, 'piecemeal lead', (H.status || '').replace(/ (near|at|grid) .*$/, '')); for (const G of mates) why(s, 'piecemeal other', ((G.status || '').replace(/ (near|at|grid|\().*$/, '').replace(/[0-9]+/g, 'N')) + (G.alignHold ? ' [bound]' : '') + ' ' + Math.round(Math.hypot(G.cx - H.cx, G.cy - H.cy) / 5) * 5 + ' km'); }
+        add(s, 'piecemeal', 1); tally(s, 'piecemeal', 1, { F: C.n + ': ' + H.n + ' alone', x: +H.cx.toFixed(1), y: +H.cy.toFixed(1), at: S.nearTown(H.cx, H.cy) }); } }
   }
 }
 const t0 = Date.now();
 while (S.t < end && !S.over) { while (ti < tape.length && tape[ti][0] <= S.t) { runCmd(tape[ti][1], tape[ti][2]); ti++; } S.stepOnce(dt); if (Math.round(S.t) % 60 === 0) hour(); }
 for (const r of farOrders) { add(r.s, 'farOrders', 1); }
-const K = ['turnBacks', 'farOrders', 'stragglers', 'mixed', 'isolated', 'piecemeal', 'jammed', 'idle', 'held', 'refused'];
+const K = ['turnBacks', 'farOrders', 'stragglers', 'mixed', 'isolated', 'piecemeal', 'jammed', 'idle', 'held', 'refused', 'spread'];
 const hours = Math.round(S.t / 60), out = { mode, arg, hours, took: Math.round((Date.now() - t0) / 1000), sides: sides.map(s => ({ s, name: SIDE[s], totals: tot[s] })), farOrders: farOrders.slice(0, 40), worst: [] };
 console.log('Coherence check: ' + (mode === 'save' ? path.basename(arg) : 'AI seed ' + arg) + ', ' + hours + ' game hours (' + out.took + ' s)');
 console.log('per 100 hours'.padEnd(14) + K.map(k => k.padStart(11)).join(''));
 for (const s of sides) console.log(SIDE[s].padEnd(14) + K.map(k => ((tot[s][k] || 0) * 100 / hours).toFixed(1).padStart(11)).join(''));
 for (const s of sides) if (longest[s].h) console.log('longest halt, ' + SIDE[s] + ': ' + longest[s].F + ', ' + longest[s].h + ' hours to ' + S.clock(longest[s].t).slice(0, 16) + ' (' + longest[s].why + ')');
-out.longest = longest;
+out.longest = longest; if (spans.length) { const q = spans.slice().sort((a, b) => a - b); console.log('corps span (km between its two farthest divisions): median ' + Math.round(q[q.length >> 1]) + ', 90th percentile ' + Math.round(q[Math.floor(q.length * .9)])); }
 // worst six-hour windows, scored by the share of each measure in its own total
 const score = r => K.reduce((a, k) => a + (r.c[k] || 0) / Math.max(1, tot[r.s][k] || 1), 0);
 const ws = Object.values(W).sort((a, b) => score(b) - score(a)).slice(0, 8);
@@ -95,5 +103,5 @@ for (const r of ws) { const top = K.filter(k => r.c[k]).sort((a, b) => (r.c[b] /
   const line = S.clock(r.w * 360).slice(0, 16) + ' ' + SIDE[r.s] + ': ' + top.map(k => k + ' ' + r.c[k]).join(', ') + (e ? ' | e.g. ' + e.F + ' ' + e.at + ' (' + e.x + ', ' + e.y + ')' : '');
   console.log('  ' + line); out.worst.push({ t: r.w * 360, s: r.s, c: r.c, ex: Object.fromEntries(Object.entries(r.ex).map(([k, v]) => [k, v.slice(0, 4)])) }); }
 { const R = Object.entries(WHY).filter(([k]) => / refused: /.test(k)); if (R.length) { console.log('\nrefusals (division-hours):'); for (const [k, v] of R.sort((a, b) => b[1] - a[1]).slice(0, 8)) console.log('  ' + v + '  ' + k.replace(/^\d refused: /, '')); } }
-if (process.env.COH_WHY) { console.log('\nreasons:'); for (const [k, v] of Object.entries(WHY).sort((a, b) => b[1] - a[1]).slice(0, 30)) console.log('  ' + v + '  ' + k); }
+if (process.env.COH_WHY) { console.log('\nreasons:'); for (const [k, v] of Object.entries(WHY).sort((a, b) => b[1] - a[1]).filter((e, i) => i < 30 || /piecemeal/.test(e[0]))) console.log('  ' + v + '  ' + k); }
 if (outFile) fs.writeFileSync(outFile, JSON.stringify(out, null, 1));
