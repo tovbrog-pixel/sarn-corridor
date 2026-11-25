@@ -13,6 +13,7 @@ const EXT_KM = .75;   // half a battalion frontage: a unit of bns battalions rea
 // how hard an attack presses: need scales the odds the commander wants; coh is the formation cohesion below which he halts; ret shifts the cohesion at which battalions fall back
 const PRESS = [{ n: 'Probe', need: 1.35, coh: .5, ret: .06 }, { n: 'Deliberate', need: 1, coh: .42, ret: 0 }, { n: 'Determined', need: .75, coh: .32, ret: -.04 }, { n: 'Whatever the cost', need: .5, coh: .22, ret: -.08 }];
 const DOCT = { US: { delay: .9, init: 1, mass: .15, crad: 1.1, n: 'US: fire direction centres mass the guns; combat commands regroup quickly' }, UK: { delay: 1.15, init: .7, mass: .15, crad: 1, n: 'British: deliberate, artillery-heavy set-piece fire plans; slower orders' }, GE: { delay: .8, init: 1.4, mass: .06, crad: 1.1, n: 'German: mission-type orders; fast staff work and junior initiative' }, IT: { delay: 1.25, init: .6, mass: .04, crad: .75, n: 'Italian: few radios; slow orders and a short command reach' } };
+const RETRY = /disorganised|ammunition|fuel/;   // refusals that time cures: the order stands and the commander tries again
 const INDEP = { rec: 1, cdo: 1 }, FMISS = { R: 'Reinforcing', GS: 'General support', GSR: 'General support, reinforcing' };
 const AMMO = { ship: .006, shipRefill: .015, inf: .005, arm: .0065, ind: .009, refill: .035, refillArt: .05 }, ATT = { str: 2.4, coh: 1.8 };
 const WXVIS = { clear: 1, cloud: 1, overcast: .9, rain: .75, fog: .45, snow: .65, dust: .35 };
@@ -449,10 +450,12 @@ function createSim(sc, player, seed, opt) {
     const en = knownEnemiesNear(F, L.length ? L : A, 3.2), contact = en.length > 0; F.contact = contact;
     let under = 0; for (const u of A) if (S.t - u.hitT < 6) under++;
     if (!O) { F.status = contact ? 'Engaged, no orders' : 'Awaiting orders'; if (under > 1 && en.length) reqCAS(F, en[0]); return; }
-    if (O.st === 'refused') { F.status = 'Refused: ' + O.why; return; }
+    // a refusal that time cures (disorganised, out of ammunition or fuel) keeps the order standing: the commander tries again each hour
+    // and moves off once he can (Sarn Corridor play: the player's divisions stood refused for days, about six at any hour)
+    if (O.st === 'refused') { if (RETRY.test(O.why) && S.t - (O.refT || O.t0) >= 60) { O.st = 'pending'; O.t0 = S.t; } else { F.status = (RETRY.test(O.why) ? 'Rallying before moving off: ' : 'Refused: ') + O.why; return; } }
     if (O.st === 'pending') {
       if (S.t < O.t0) { F.status = 'Preparing orders (' + Math.ceil(O.t0 - S.t) + ' min)'; return; }
-      const why = canComply(F, O); if (why) { O.st = 'refused'; O.why = why; say(F, 'Cannot comply: ' + why + '.', 2); F.status = 'Refused: ' + why; return; }
+      const why = canComply(F, O); if (why) { const again = O.why === why; O.st = 'refused'; O.why = why; O.refT = S.t; if (!again) say(F, RETRY.test(why) ? 'Cannot move off yet: ' + why + '. The order stands; we move once we can.' : 'Cannot comply: ' + why + '.', 2); F.status = (RETRY.test(why) ? 'Rallying before moving off: ' : 'Refused: ') + why; return; }
       O.st = 'active'; O.prog = clamp(polyProj(O.path, F.cx, F.cy), 0, O.L); O.best = O.prog; O.bestT = S.t; if (O.L > 2) say(F, 'Moving out toward ' + nearTown(O.path[O.path.length - 1][0], O.path[O.path.length - 1][1]).replace('near ', '') + '.', 0);
     }
     for (const u of L) u.assault = F.assaultT > S.t && u.coh > .4;
@@ -522,7 +525,7 @@ function createSim(sc, player, seed, opt) {
       // an enemy in fighting order within 1.2 km blocks the way: close with him, fight through on an assault, or fall back, but do not drive past
       let zf = 1; if (!ret && u.ze && u.pi < u.path.length) { const q = u.path[u.pi], qx = q[0] - u.x, qy = q[1] - u.y, ql = Math.hypot(qx, qy) || 1, rr = sc.sides[u.s].rear || [0, 0], back = (qx * rr[0] + qy * rr[1]) / ql > .3;
         if (!back) { const toward = (qx * (u.ze.x - u.x) + qy * (u.ze.y - u.y)) / ql > .15 * u.zd; if (u.assault) zf = .35; else if (!toward || u.zd < .5) { if (u.ze.seenT < S.t - 6) u.ze.seenT = S.t; continue; } else zf = .5; } }
-      const c = map.idx(u.x, u.y); let sp = zf * baseSpeed(u) * (u.fat > .5 ? 1 - .6 * (u.fat - .5) : 1) * (!ret && !u.det && !u.fm && !INDEP[u.cls] && u.f.pace && !u.f.contact && u.f.order && u.f.order.st === 'active' ? Math.min(1, u.f.pace / baseSpeed(u)) : 1) * Math.max(.05, (u.f.dev && !u.det ? map.facX : map.fac)[u.mvi][c]) * wm * ((u.f.alignHold || u.f.flankHold) && !ret && !u.det && !u.f.contact && u.state !== 'retreat' ? 0 : 1) * (sc.hHour && S.t < sc.hHour * 60 && u.path && u.path[u.pi] && S.ownAt(u.path[u.pi][0], u.path[u.pi][1]) !== u.s ? 0 : 1) * (S.t - u.hitT < 3 && !ret ? .5 : 1) * (ret ? 1.15 : 1) * (1 - .5 * u.f.dis);
+      const c = map.idx(u.x, u.y); let sp = zf * baseSpeed(u) * (u.fat > .5 ? 1 - .6 * (u.fat - .5) : 1) * (!ret && !u.det && !u.fm && !INDEP[u.cls] && u.f.pace && !u.f.contact && u.f.order && u.f.order.st === 'active' ? Math.min(1, u.f.pace / baseSpeed(u)) : 1) * Math.max(.05, (u.f.dev && !u.det ? map.facX : map.fac)[u.mvi][c]) * wm * ((u.f.alignHold || u.f.flankHold) && !ret && !u.det && !u.f.contact && u.state !== 'retreat' && !closing(u) ? 0 : 1) * (sc.hHour && S.t < sc.hHour * 60 && u.path && u.path[u.pi] && S.ownAt(u.path[u.pi][0], u.path[u.pi][1]) !== u.s ? 0 : 1) * (S.t - u.hitT < 3 && !ret ? .5 : 1) * (ret ? 1.15 : 1) * (1 - .5 * u.f.dis);
       let rem = sp * dt;
       while (rem > 0 && u.pi < u.path.length) {
         const p = u.path[u.pi], dx = p[0] - u.x, dy = p[1] - u.y, d = Math.hypot(dx, dy);
@@ -602,7 +605,7 @@ function createSim(sc, player, seed, opt) {
       else if (u.broken && u.state !== 'retreat' && u.ned < 2.5) startRetreat(u, 5);
       if (!u.broken && u.coh < clamp(.22 + .25 * (.6 - u.mor) + (u.f.order && u.f.order.press != null ? PRESS[u.f.order.press].ret : 0), .1, .46) && u.state !== 'retreat') startRetreat(u);
       else if (!u.broken && u.state === 'retreat' && u.coh > .5 && !u.goal) u.state = 'ok';
-      else if (u.state === 'retreat' && !u.goal && !u.needPath) { if (u.ned < 1.2) startRetreatAgain(u); }
+      else if (u.state === 'retreat' && !u.goal && !u.needPath) { if (u.ned < 1.2) startRetreatAgain(u); else if (u.ned > 3 && !u.det && u.f.active && !u.f.dead && u.cls !== 'hq' && u.mv !== 'ship') rally(u); }
     }
   }
   // counter-battery: a firing battery is located by sound ranging, flash spotting and air observation over 30 to 90 minutes of its fire, faster with air observation up.
@@ -615,6 +618,8 @@ function createSim(sc, player, seed, opt) {
         if (now - e.fireT < 1.01) { let near = false; for (const w of side[o]) if (Math.hypot(w.x - e.x, w.y - e.y) < 15) { near = true; break; } if (near) { if (e.cbX == null) { e.cbX = e.x; e.cbY = e.y; } e.cb = (e.cb || 0) + (CBR[nat] || 1 / 50) * air; if (e.cb >= 1) e.cbT = now; } }
         else if (e.cb) e.cb *= .995;
         if (e.cbT != null && now - e.cbT < 60) e.seenT = now; } } }
+  // a battalion that has fallen back over 6 km from its division and is clear of the enemy makes for a rally point 2 km behind the division's centre
+  function rally(u) { const F = u.f, d = Math.hypot(u.x - F.cx, u.y - F.cy); if (d < 6 || S.t - (u.rallyT || -1e9) < 120) return; u.rallyT = S.t; const r = sc.sides[u.s].rear || [0, 0], p = map.snap(u.mvi, F.cx + r[0] * 2, F.cy + r[1] * 2, 5); if (p) { u.goal = p; u.needPath = true; u.path = null; } }
   function startRetreatAgain(u) { u.state = 'ok'; startRetreat(u); }
   function pick(u, e, d) {
     const k = u.k; let sc0;
@@ -1220,6 +1225,8 @@ function createSim(sc, player, seed, opt) {
   let tC = 0, tSup = 3, tAir = 2, tAi = 0, tBr = 1, tVp = 4, acc = 0;
   // time spent in each part of the step, in milliseconds (S.TT), for tuning; performance.now is cheap at this rate
   const TT = S.TT = {}, _T = (k, t) => { TT[k] = (TT[k] || 0) + performance.now() - t; };
+  // a battalion over 3 km from its division's centre, heading nearer, keeps closing up while the division halts at a bound or for its flank
+  const closing = u => { const F = u.f, q = u.path && u.path[u.pi]; if (!q) return false; const d = Math.hypot(u.x - F.cx, u.y - F.cy); return d > 3 && Math.hypot(q[0] - F.cx, q[1] - F.cy) < d; };
   function step(dt) {
     S.t += dt; S.lastDt = dt; { const _h = performance.now(); if (S.cmdHook) S.cmdHook(); _T('hooks', _h); } const h = S.hourOf(S.t); S.night = h < S.dayA || h > S.dayB;
     const wi = Math.min(weather.length - 1, Math.floor(S.t / 720)); if (weather[wi] !== S.wx) { S.wx = weather[wi]; say(-1, 'Weather: ' + WXNAME[S.wx] + (S.wx === 'clear' || S.wx === 'cloud' ? '. Aircraft can fly.' : '. Air operations suspended.'), 1); }

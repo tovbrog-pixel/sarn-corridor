@@ -12,7 +12,7 @@
 //     division forward to line the open flank.
 //  4. Main effort: the army commander gives the corps with the best objective a narrow zone and a reserve; the others attack
 //     on wide zones without one (command.js, armyTick).
-const DOCTRINE = { devKm: 15, alignKm: 8, guardKm0: 10, guardKmPerBn: 4, flankOff: 7, sampleKm: 4, tickMin: 30, xingNearKm: 6, bridgeKm: 8 };   // xingNearKm: how near the river the division must be to start an assault crossing; bridgeKm: an intact bridge this close is used instead
+const DOCTRINE = { devKm: 15, alignKm: 8, alignMaxH: 6, alignGainKm: 2, guardKm0: 10, guardKmPerBn: 4, flankOff: 7, sampleKm: 4, tickMin: 30, xingNearKm: 6, bridgeKm: 8 };   // xingNearKm: how near the river the division must be to start an assault crossing; bridgeKm: an intact bridge this close is used instead
 function attachDoctrine(S) {
   const sc = S.sc, D = Object.assign({}, DOCTRINE, sc.doctrine || {});
   const fighting = u => u.active && !u.dead && u.cls !== 'hq' && u.mv !== 'ship';
@@ -41,7 +41,15 @@ function attachDoctrine(S) {
         const F = o.F, mob = mobile(F), free = mob && (O.opt.main || O.opt.exploit);
         // 2. alignment with the neighbours to left and right
         if (!free && fwd.length > 1) { const nb = [fwd[i - 1], fwd[i + 1]].filter(Boolean), lag = nb.reduce((a, n) => n.prog < a.prog ? n : a, nb[0]);
-          if (lag && o.prog - lag.prog > D.alignKm && !F.contact) F.alignHold = 'Halted at the bound, waiting for ' + lag.F.n + ' to come up on the flank'; }
+          const af = O.alignFree || (O.alignFree = {});
+          if (lag && o.prog - lag.prog > D.alignKm && !F.contact && !af[F.id]) {
+            // a halt at the bound lasts while the laggard is still closing up: once it has gained under alignGainKm in alignMaxH hours
+            // (held up, fighting or stopped), the division goes on and the corps hears why (Sarn Corridor play: 8th Infantry Division waited 156 hours)
+            const h = F.alignT && F.alignLag === lag.F ? F.alignT : (F.alignT = S.t, F.alignLag = lag.F, F.alignP = lag.prog, S.t);
+            if (S.t - h > D.alignMaxH * 60 && lag.prog - F.alignP >= D.alignGainKm) { F.alignT = S.t; F.alignP = lag.prog; }   // still closing up: wait another spell
+            if (S.t - F.alignT > D.alignMaxH * 60 && lag.prog - F.alignP < D.alignGainKm) { af[F.id] = 1; F.alignT = 0; S.say(C.s, C.n + ': ' + F.n + ' goes on alone; ' + lag.F.n + ' has been held up for ' + D.alignMaxH + ' hours.', 1); }
+            else F.alignHold = 'Halted at the bound, waiting for ' + lag.F.n + ' to come up on the flank'; }
+          else F.alignT = 0; }
         // 3. a mobile spearhead's open flanks: sample back along the axis on both sides
         if (mob) { const cap = D.guardKm0 + D.guardKmPerBn * guardBns(F); let open = [0, 0];
           for (let s = 0; s < 2; s++) { const sg = s ? -1 : 1; for (let d = 0; d < Math.max(0, o.prog) - 2; d += D.sampleKm) { const x = o.p[0] - ax * d + px * sg * D.flankOff, y = o.p[1] - ay * d + py * sg * D.flankOff; if (x < 0 || y < 0 || x > S.map.w || y > S.map.h) break; if (S.ownAt(x, y) === F.s) break; open[s] = d + D.sampleKm; } }
