@@ -5,7 +5,7 @@
 // keeps a reserve when his style calls for it, and passes each child a parallel line of advance, so sister
 // formations do not cross each other's routes. Children then plan their own orders as before.
 // review settings, all starting values for balance testing
-const CMDAI = { spentFrac: .45, spentCoh: .3, stallMin: 180, onObjKm: 2.5, coolMin: 120, townBeyondKm: 4, riverBeyondKm: 3, kmPerBn: .45, echelonKm: 15, restMin: 1440, divZoneKm: 6 };   // kmPerBn: attack frontage per leading battalion (a 9-battalion division needs about 4 km); echelonKm: a child this far behind the others follows as second echelon, and a corps this far beyond an army's objective keeps its orders; restMin: a relieved division rests this long before it can be committed again
+const CMDAI = { spentFrac: .45, spentCoh: .3, stallMin: 180, onObjKm: 2.5, coolMin: 120, townBeyondKm: 4, riverBeyondKm: 3, kmPerBn: .45, echelonKm: 15, restMin: 1440, divZoneKm: 6, followBackKm: 14 };   // followBackKm: under concentration the following divisions shift sideways this far behind the objective's leading formations, behind their artillery   // kmPerBn: attack frontage per leading battalion (a 9-battalion division needs about 4 km); echelonKm: a child this far behind the others follows as second echelon, and a corps this far beyond an army's objective keeps its orders; restMin: a relieved division rests this long before it can be committed again
 function attachCommand(S) {
   const nodes = []; S.commands = nodes; const sc = S.sc;
   const segOf = (line, a, b) => {           // the part of polyline `line` between distances a and b
@@ -148,7 +148,7 @@ function attachCommand(S) {
       const off = (k - (second.length - 1) / 2) * 6, hw = 2, bx = mid.x - ax * 10 + px * off, by = mid.y - ay * 10 + py * off;
       // the route runs first behind the line of departure to the centre (8 km behind the leading formations), then forward, so the
       // second echelon passes behind the leading divisions' columns instead of across them
-      const wb = med + 8, wx = Math.max(0, Math.min(S.map.w, mid.x - ax * wb + px * off)), wy = Math.max(0, Math.min(S.map.h, mid.y - ay * wb + py * off));
+      const wb = med + (conc ? CMDAI.followBackKm : 8), wx = Math.max(0, Math.min(S.map.w, mid.x - ax * wb + px * off)), wy = Math.max(0, Math.min(S.map.h, mid.y - ay * wb + py * off));
       out.push({ child: o.c, path: [[wx, wy]].concat(P.map(q => [q[0] + px * off, q[1] + py * off])), line: [[bx + px * hw, by + py * hw], [bx - px * hw, by - py * hw]], reserve: true }); });
     out.why = reserve && note ? (towns.length || beyond ? 'town' : river ? 'river' : '') : '';
     out.note = [widened, note, beyondNote].filter(Boolean).join(' '); out.line = ln; return out;
