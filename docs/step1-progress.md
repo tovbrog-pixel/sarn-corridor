@@ -228,3 +228,7 @@ Checks: regression matches the baseline. AI-against-AI seeds 11 to 13 at 200 hou
 | vald-staff | Valdenmark at Staff exercise | 13 of 20 | 57 / 82 | 13 |
 
 The four difficulty levels move the corridor result by less than the spread between batches of 20, so the existing levels are too weak to even out the corridor.
+
+## Shared engine repository (25 Nov 2026)
+
+`engine/src` is now a git subtree of tovbrog-pixel/lines-of-advance-engine, the engine shared with France 1944. `tools/engine.sh pull` takes the latest shared engine; `tools/engine.sh push` sends engine changes committed here back to it, after both games' checks (`engine/src/README.md`).
