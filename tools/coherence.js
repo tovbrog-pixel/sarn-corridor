@@ -5,12 +5,13 @@
 //   wander     a division turns back (its centre moves over 1.5 km in one hour and back over 1.5 km in the next),
 //              a commander's order sends a division over 40 km, a battalion straggles (over 8 km from its division centre with
 //              no battalion of its own within 5 km)
-//   shape      a battalion mixed into a sister division of its corps (the nearest friendly battalion within 2 km belongs to
-//              the sister and its own division centre is over 4 km away), a division attacking (in contact under an advance order)
+//   shape      a battalion mixed into a sister division of its corps (over 4 km from its own division's centre, nearer the sister's
+//              centre than its own, with a battalion of the sister within 2 km), a division attacking (in contact under an advance order)
 //              with no other division within 8 km
 //   piecemeal  a corps attack where one division is in contact and the others in the same attack (objective lines within 15 km of its own)
 //              are over 10 km off and out of contact
-//   jams       a battalion on the move with a path that made under 0.3 km in the hour with no enemy within 4 km and no halt
+//   jams       a battalion on the move with a path that made under 0.3 km in the hour with no enemy within 4 km, no halt, over
+//              0.5 km from its goal and no unbridged river between it and its goal
 //   refused    a division whose order its commander refused, in division-hours, with the reasons
 //   spread     a corps whose two farthest divisions stand over 30 km apart, in corps-hours (and the median corps span)
 //   held       a division halted at a bound (alignment) or for an open flank, in division-hours, with the longest unbroken halt
@@ -35,6 +36,9 @@ const runCmd = (k, a) => { const F = S.forms[a[0]]; byPlayer = true; try {
 // far orders: wrap issueOrder to see who gave each order and how far it sends the division
 const farOrders = [], io = S.issueOrder;
 S.issueOrder = function (F, p, line, opt) { const L = line && line.length ? line : p; if (L && L.length && !byPlayer && sides.includes(F.s)) { const m = L[Math.floor(L.length / 2)], d = Math.hypot(m[0] - F.cx, m[1] - F.cy); if (d > 40) farOrders.push({ t: S.t, s: F.s, F: F.n, km: Math.round(d), then: opt && opt.then }); } return io.apply(this, arguments); };
+// a river with no bridge of ours between a battalion and its goal: the battalion waits for boats or a bridge, which is no jam
+const riverAhead = (u, s) => { const g = u.goal; if (!g) return false; const m = S.map, a = [u.x, u.y], l = Math.hypot(g[0] - a[0], g[1] - a[1]), n = Math.max(1, Math.ceil(l / .4));
+  for (let k = 0; k <= n; k++) { const x = a[0] + (g[0] - a[0]) * k / n, y = a[1] + (g[1] - a[1]) * k / n; if (x < 0 || y < 0 || x >= m.w || y >= m.h || m.t[m.idx(x, y)] !== 13) continue; if (!m.bridges.some(br => br.intact && !br.gone && Math.hypot(br.x - x, br.y - y) < 2.5 && S.ownAt(br.x, br.y) === s)) return true; k += 3; } return false; };
 const live = F => F.active && !F.dead, bats = F => F.subs.filter(u => u.active && !u.dead && u.cls !== 'hq' && !u.det && u.mv !== 'ship');
 const W = {}; const tally = (s, k, n, where) => { if (!n) return; const w = Math.floor(S.t / 360); const key = s + '|' + w; const r = W[key] || (W[key] = { s, w, c: {}, ex: {} }); r.c[k] = (r.c[k] || 0) + n; if (where) (r.ex[k] = r.ex[k] || []).push(where); };
 const tot = [{}, {}]; const add = (s, k, n) => { tot[s][k] = (tot[s][k] || 0) + n; };
@@ -59,18 +63,19 @@ function hour() {
       // halted at a bound or for an open flank: division-hours, and the longest unbroken halt
       if (F.alignHold || F.flankHold) { add(s, 'held', 1); tally(s, 'held', 1, Object.assign({ why: F.alignHold || F.flankHold }, where)); h.hold = (h.hold || 0) + 1; if (h.hold > (longest[s].h || 0)) longest[s] = { h: h.hold, F: F.n, why: F.alignHold || F.flankHold, t: S.t }; } else h.hold = 0;
       // shape: mixed into a sister division of the same corps
-      let mix = 0; if (F.parent && F.parent.level === 'corps') for (const u of us) { if (Math.hypot(u.x - F.cx, u.y - F.cy) <= 4) continue; let bd = 2, bG = null; for (const G of divs) { if (G === F || G.parent !== F.parent) continue; for (const v of bats(G)) { const d = Math.hypot(v.x - u.x, v.y - u.y); if (d < bd) { bd = d; bG = G; } } } if (bG) { mix++; if (process.env.COH_WHY) why(s, 'mixed', u.cls + (u.state === 'retreat' ? ' retreating' : '') + (u.det ? ' detached' : '') + ' own:' + (F.order ? F.order.st + (F.post ? '/' + F.post : '') : 'none') + (F.contact ? '+contact' : '') + ' sister:' + (bG.order ? bG.order.st + (bG.post ? '/' + bG.post : '') : 'none') + (bG.contact ? '+contact' : '') + (u.path && u.pi < u.path.length ? ' moving' : ' still')); } }
+      let mix = 0; if (F.parent && F.parent.level === 'corps') for (const u of us) { const dOwn = Math.hypot(u.x - F.cx, u.y - F.cy); if (dOwn <= 4) continue; let bd = 2, bG = null; for (const G of divs) { if (G === F || G.parent !== F.parent || Math.hypot(u.x - G.cx, u.y - G.cy) >= dOwn) continue; for (const v of bats(G)) { const d = Math.hypot(v.x - u.x, v.y - u.y); if (d < bd) { bd = d; bG = G; } } } if (bG) { mix++; if (process.env.COH_WHY) why(s, 'mixed', u.cls + (u.state === 'retreat' ? ' retreating' : '') + (u.det ? ' detached' : '') + ' own:' + (F.order ? F.order.st + (F.post ? '/' + F.post : '') : 'none') + (F.contact ? '+contact' : '') + ' sister:' + (bG.order ? bG.order.st + (bG.post ? '/' + bG.post : '') : 'none') + (bG.contact ? '+contact' : '') + (u.path && u.pi < u.path.length ? ' moving' : ' still')); } }
       if (mix) { add(s, 'mixed', mix); tally(s, 'mixed', mix, where); }
       // shape: isolated division in contact
       if (F.contact && F.order && F.order.st === 'active' && F.order.L > 1) { let alone = true; for (const G of divs) { if (G === F) continue; if (Math.hypot(G.cx - F.cx, G.cy - F.cy) < 8 || bats(G).some(v => us.some(u => Math.hypot(v.x - u.x, v.y - u.y) < 8))) { alone = false; break; } } if (alone) { add(s, 'isolated', 1); tally(s, 'isolated', 1, where); } }
       // jams
       const ehere = near(1 - s, F.cx, F.cy, 6)[0];
-      let jam = 0; for (const u of us) { const q = u._cohP; u._cohP = [u.x, u.y]; if (!q || !u.path || u.pi >= u.path.length || (u.coh < .4 && S.t - u.hitT < 60) || F.halt || F.alignHold || F.flankHold || u.state === 'retreat') continue; if (Math.hypot(u.x - q[0], u.y - q[1]) < .3 && near(1 - s, u.x, u.y, 4)[0] > 4) { jam++; if (process.env.COH_WHY) { const c = S.map.idx(u.x, u.y), crowd = bats(F).length; why(s, 'jam', (u.fuel <= 0 && u.mv !== 'foot' ? 'no fuel' : u.coh < .4 ? 'low cohesion' : F.f && 0 ? '' : u.f && u.f.pace === 0 ? 'pace 0' : (S.map.fac[u.mvi][c] < .1 ? 'bad ground' : 'other')) + ' ' + u.cls + ' ' + u.mv); } } }
+      let jam = 0; for (const u of us) { const q = u._cohP; u._cohP = [u.x, u.y]; if (!q || !u.path || u.pi >= u.path.length || (u.goal && Math.hypot(u.goal[0] - u.x, u.goal[1] - u.y) < .5) || riverAhead(u, s) || (u.coh < .4 && S.t - u.hitT < 60) || F.halt || F.alignHold || F.flankHold || u.state === 'retreat') continue; if (Math.hypot(u.x - q[0], u.y - q[1]) < .3 && near(1 - s, u.x, u.y, 4)[0] > 4) { jam++; if (process.env.COH_WHY) { const c = S.map.idx(u.x, u.y), crowd = bats(F).length; why(s, 'jam', (u.fuel <= 0 && u.mv !== 'foot' ? 'no fuel' : u.coh < .4 ? 'low cohesion' : F.f && 0 ? '' : u.f && u.f.pace === 0 ? 'pace 0' : (S.map.fac[u.mvi][c] < .1 ? 'bad ground' : 'other')) + ' ' + u.cls + ' ' + u.mv); } } }
       if (jam) { add(s, 'jammed', jam); tally(s, 'jammed', jam, where); }
       // an order the commander refused and still stands refused
       if (F.order && F.order.st === 'refused') { add(s, 'refused', 1); tally(s, 'refused', 1, Object.assign({ why: F.order.why }, where)); why(s, 'refused', F.order.why || '?'); }
       // idle with orders
-      const O = F.order; if (O && O.st === 'active' && n >= 4 && Math.hypot(P[n - 1][0] - P[0][0], P[n - 1][1] - P[0][1]) < .5 && ehere > 5 && !F.halt && !F.alignHold && !F.flankHold && !F.bridge && !F.needEng && !/river|cross|boat|bridge/i.test(F.status || '')) { add(s, 'idle', 1); tally(s, 'idle', 1, where); }
+      const O = F.order; if (process.env.COH_WHY && O && O.st === 'active' && n >= 4 && Math.hypot(P[n - 1][0] - P[0][0], P[n - 1][1] - P[0][1]) < .5 && ehere > 5) why(s, 'idle', (F.status || '').replace(/ (near|at|grid|\().*$/, '').replace(/[0-9]+/g, 'N') + (O.then ? ' then ' + O.then : '') + (F.halt ? ' [halt]' : '') + (F.alignHold ? ' [bound]' : '') + (F.flankHold ? ' [flank]' : ''));
+      if (O && O.st === 'active' && n >= 4 && Math.hypot(P[n - 1][0] - P[0][0], P[n - 1][1] - P[0][1]) < .5 && ehere > 5 && !us.some(u => riverAhead(u, s)) && !F.halt && !F.alignHold && !F.flankHold && !F.bridge && !F.needEng && !/river|cross|boat|bridge/i.test(F.status || '')) { add(s, 'idle', 1); tally(s, 'idle', 1, where); }
     }
     // piecemeal: per corps
     const corps = [...new Set(divs.map(F => F.parent).filter(C => C && C.level === 'corps'))];

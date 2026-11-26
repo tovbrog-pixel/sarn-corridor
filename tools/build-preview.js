@@ -6,7 +6,7 @@ const out = process.argv[2] || '/tmp/preview'; fs.mkdirSync(out, { recursive: tr
 const which = process.argv[3] || 'corridor', menu = process.argv[4] === 'menu', side = menu ? -1 : +(process.argv[4] == null ? -1 : process.argv[4]);   // 'menu': open on the scenario menu (the desktop app)
 const sc = require('./scenario-corridor')();
 const b64 = a => Buffer.from(a.buffer, a.byteOffset, a.byteLength).toString('base64');
-const keep = ['urban', 'districts', 'capBig', 'supplyMin', 'id', 'title', 'sub', 'modules', 'front', 'detourKm', 'aiExact', 'divScale', 'view', 'phaseLines', 'fieldPlan', 'commands', 'cmdPlan', 'politics', 'brief', 'hist', 'ports', 'beach', 'w', 'h', 'cs', 'realLines', 'rivers', 'roads', 'rails', 'towns', 'ownCell', 'thin', 'ownR', 'ownMax', 'isoShrinkKm', 'variants', 'hHour', 'intel', 'corpsPlan', 'armyAI', 'repl', 'playerSides', 'labels', 'hours', 'start', 'forest', 'rough', 'marsh', 'bridges', 'vp', 'weather', 'forms'];
+const keep = ['concentrate', 'urban', 'districts', 'capBig', 'supplyMin', 'id', 'title', 'sub', 'modules', 'front', 'detourKm', 'aiExact', 'divScale', 'view', 'phaseLines', 'fieldPlan', 'commands', 'cmdPlan', 'politics', 'brief', 'hist', 'ports', 'beach', 'w', 'h', 'cs', 'realLines', 'rivers', 'roads', 'rails', 'towns', 'ownCell', 'thin', 'ownR', 'ownMax', 'isoShrinkKm', 'variants', 'hHour', 'intel', 'corpsPlan', 'armyAI', 'repl', 'playerSides', 'labels', 'hours', 'start', 'forest', 'rough', 'marsh', 'bridges', 'vp', 'weather', 'forms'];
 const D = {}; for (const k of keep) D[k] = sc[k];
 if (sc.thin) D.thin = sc.thin.map(r => r.source);   // regular expressions travel as their source text
 D.raster = { w: sc.raster.w, h: sc.raster.h, t: b64(sc.raster.t), el: b64(sc.raster.el) };

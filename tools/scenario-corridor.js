@@ -8,6 +8,8 @@
 const E = require('./load-engine')(), { createSim, SCENARIOS, divForm } = E;
 // unit level: SC_LEVEL=reg builds every division from the regiment-level templates (one unit per regiment or brigade)
 const LEVEL = process.env.SC_LEVEL || 'bn';
+// SC_WIDE=1: the old broad-front plan for comparison (every infantry corps attacks along its whole sector, no concentration rule)
+const SC_WIDE = !!process.env.SC_WIDE;
 const sarnMap = require('./sarnmap');
 const fs = require('fs');
 const polyLen = l => l.reduce((a, p, i) => i ? a + Math.hypot(p[0] - l[i - 1][0], p[1] - l[i - 1][1]) : 0, 0);
@@ -90,8 +92,12 @@ function buildVariant(sarnPlan, vAxis) {
   const toW = l => l.map(p => W(p[0], p[1]));
   corpsPlan.push({ t: HHOUR + .5, c: 'vd-pza', opt: { main: true, reserve: false }, line: toW(MAIN.obj) });
   corpsPlan.push({ t: HHOUR + 24, c: 'vd-pzb', opt: { main: true, reserve: false }, line: toW(MAIN.obj.map(p => [p[0] + 45, p[1]])) });
-  ['vd-i', 'vd-ii', 'vd-iii', 'vd-iv'].forEach(id => { const ys = forms.filter(f => f.corps === id).map(f => f.y); const y0 = Math.min(...ys), y1 = Math.max(...ys), seg = BANK.filter(p => p[1] >= y0 - 8 && p[1] <= y1 + 8).map(p => [p[0] + 10, p[1]]);
-    if (seg.length >= 2) corpsPlan.push({ t: HHOUR + 1, c: id, opt: { reserve: false }, line: toW(seg) }); });
+  // concentration (Tov 25 Nov 2026): the two infantry corps nearest the main axis attack across the Vesna, each on a narrow zone at its
+  // decisive point (the engine's concentration rule); the other infantry corps hold and screen their sectors until the army commits them
+  const my = MAIN.obj.reduce((a, p) => a + p[1], 0) / MAIN.obj.length, inf = ['vd-i', 'vd-ii', 'vd-iii', 'vd-iv'].map(id => { const ys = forms.filter(f => f.corps === id).map(f => f.y); return { id, y0: Math.min(...ys), y1: Math.max(...ys), d: Math.abs((Math.min(...ys) + Math.max(...ys)) / 2 - my) }; });
+  const attackers = new Set(inf.slice().sort((a, b) => a.d - b.d).slice(0, SC_WIDE ? 4 : 2).map(o => o.id));
+  inf.forEach(({ id, y0, y1 }) => { const seg = BANK.filter(p => p[1] >= y0 - 8 && p[1] <= y1 + 8).map(p => [p[0] + 10, p[1]]);
+    if (seg.length >= 2 && attackers.has(id)) corpsPlan.push({ t: HHOUR + 1, c: id, opt: { reserve: false, wide: SC_WIDE }, line: toW(seg) }); });
   forms.find(f => f.n === '11th Infantry Division').ai = [{ t: HHOUR + .5, path: [], line: toW([[565, 105], [580, 140]]) }];
   corpsPlan.push({ t: HHOUR + 72 + 96, c: 'ko-w', line: toW([[800, 135], [815, 255]]) });
   return { forms, commands: corpsList, cmdPlan, corpsPlan, variantName: 'Sarn expects ' + sarnPlan + '; Valdenmark main effort ' + vAxis };
@@ -131,7 +137,7 @@ function makeCorridor() {
     assets: s ? XEQ_S : XEQ_V, sources: s ? sSrc : vSrc, pool: [], bases: s ? sBases : vBases, transport: { aircraft: 0 }, groups: s ? sGroups : vGroups }));
   const v0 = variants[0];
   return Object.assign({}, base, m, { id: 'corridor', title: 'Corridor Crisis', sub: 'Valdenmark against Sarn: two days of tension, then three weeks of war', start: START, hours: HHOUR + DAYS * 24, hHour: HHOUR,
-    ownCell: +(process.env.SC_OWNCELL || 1), supplyMin: process.env.SC_SUPMIN ? +process.env.SC_SUPMIN : undefined, ownR: 5, ownMax: 25, isoShrinkKm: 20, thin: [/^\d+(st|nd|rd|th) (\(\w+\) )?Division$/], aiExact: 1, labels: ['Valdenmark', 'Sarn'], divScale: [22, 70],   // thin: Sarn's divisions stretch over long sectors (thin defence)
+    concentrate: !SC_WIDE, ownCell: +(process.env.SC_OWNCELL || 1), supplyMin: process.env.SC_SUPMIN ? +process.env.SC_SUPMIN : undefined, ownR: 5, ownMax: 25, isoShrinkKm: 20, thin: [/^\d+(st|nd|rd|th) (\(\w+\) )?Division$/], aiExact: 1, labels: ['Valdenmark', 'Sarn'], divScale: [22, 70],   // thin: Sarn's divisions stretch over long sectors (thin defence)
     forms: v0.forms, commands: v0.commands, cmdPlan: v0.cmdPlan, corpsPlan: v0.corpsPlan, variants,
     armyAI: { only: ['vd-army', 'ko-army'], from: HHOUR + 30, frontKm: 5, reachKm: 70, cadenceH: 18, waitH: 30, supply: .3, pocketBonus: 2.5 },
     detourKm: 30, view: { x: 330, y: 190, dist: 230, pitch: 1.3 }, playerSides: [0, 1, -1],
